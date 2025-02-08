@@ -66,7 +66,7 @@
 
 struct netlbl_lsm_secattr;
 
-extern int __ro_protected selinux_enabled;
+extern int selinux_enabled;
 
 /* Policy capabilities */
 enum {
@@ -133,12 +133,7 @@ struct extended_perms {
 };
 
 /* definitions of av_decision.flags */
-#if defined(CONFIG_BBSECURE_SECURITY_SELINUX_AVD_PERMISSIVE)
 #define AVD_FLAGS_PERMISSIVE	0x0001
-#else
-/* This flag is changed to permissive if hlos token is present */
-extern u32 AVD_FLAGS_PERMISSIVE;
-#endif
 
 void security_compute_av(u32 ssid, u32 tsid,
 			 u16 tclass, struct av_decision *avd,

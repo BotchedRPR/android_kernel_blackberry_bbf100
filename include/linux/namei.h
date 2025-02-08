@@ -28,17 +28,9 @@ enum {LAST_NORM, LAST_ROOT, LAST_DOT, LAST_DOTDOT, LAST_BIND};
 #define LOOKUP_DIRECTORY	0x0002
 #define LOOKUP_AUTOMOUNT	0x0004
 
-#if defined(CONFIG_BBSECURE_O_BENEATH)
-#define LOOKUP_BENEATH		0x0008
-#endif
-
 #define LOOKUP_PARENT		0x0010
 #define LOOKUP_REVAL		0x0020
 #define LOOKUP_RCU		0x0040
-
-#if defined(CONFIG_BBSECURE_O_NOSYMLINK)
-#define LOOKUP_NOSYMLINK	0x0080
-#endif
 
 /*
  * Intent data
@@ -96,11 +88,7 @@ extern int follow_up(struct path *);
 extern struct dentry *lock_rename(struct dentry *, struct dentry *);
 extern void unlock_rename(struct dentry *, struct dentry *);
 
-#if defined(CONFIG_BBSECURE_O_BENEATH) || defined(CONFIG_BBSECURE_O_NOSYMLINK)
-extern int nd_jump_link(struct path *path);
-#else
 extern void nd_jump_link(struct path *path);
-#endif
 
 static inline void nd_terminate_link(void *name, size_t len, size_t maxlen)
 {

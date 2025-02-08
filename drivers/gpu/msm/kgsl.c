@@ -4338,7 +4338,6 @@ static unsigned long _cpu_get_unmapped_area(unsigned long bottom,
 	info.length = len;
 	info.align_offset = 0;
 	info.align_mask = align - 1;
-	info.threadstack_offset = gr_rand_threadstack_offset(current->mm, file, flags);
 
 	addr = vm_unmapped_area(&info);
 

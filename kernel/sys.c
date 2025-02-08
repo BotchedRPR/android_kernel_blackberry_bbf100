@@ -373,14 +373,6 @@ SYSCALL_DEFINE2(setregid, gid_t, rgid, gid_t, egid)
 		new->sgid = new->egid;
 	new->fsgid = new->egid;
 
-/*start:BBSECURE_BIDE*/
-#ifdef CONFIG_BBSECURE_BIDE
-	retval = security_task_fix_setgid(new, old, LSM_SETID_RE);
-	if (retval != 0)
-		goto error;
-#endif
-/*end:BBSECURE_BIDE*/
-
 	return commit_creds(new);
 
 error:
@@ -417,14 +409,6 @@ SYSCALL_DEFINE1(setgid, gid_t, gid)
 		new->egid = new->fsgid = kgid;
 	else
 		goto error;
-
-/*start:BBSECURE_BIDE*/
-#ifdef CONFIG_BBSECURE_BIDE
-	retval = security_task_fix_setgid(new, old, LSM_SETID_ID);
-	if (retval != 0)
-		goto error;
-#endif
-/*end:BBSECURE_BIDE*/
 
 	return commit_creds(new);
 
@@ -726,14 +710,6 @@ SYSCALL_DEFINE3(setresgid, gid_t, rgid, gid_t, egid, gid_t, sgid)
 	if (sgid != (gid_t) -1)
 		new->sgid = ksgid;
 	new->fsgid = new->egid;
-
-/*start:BBSECURE_BIDE*/
-#ifdef CONFIG_BBSECURE_BIDE
-	retval = security_task_fix_setgid(new, old, LSM_SETID_RES);
-	if (retval < 0)
-		goto error;
-#endif
-/*end:BBSECURE_BIDE*/
 
 	return commit_creds(new);
 

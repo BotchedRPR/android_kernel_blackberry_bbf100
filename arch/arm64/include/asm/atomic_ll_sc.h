@@ -4,7 +4,6 @@
  * Copyright (C) 1996 Russell King.
  * Copyright (C) 2002 Deep Blue Solutions Ltd.
  * Copyright (C) 2012 ARM Ltd.
- * Copyright (C) 2017 BlackBerry Limited
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -25,30 +24,6 @@
 #ifndef __ARM64_IN_ATOMIC_IMPL
 #error "please don't include this file directly"
 #endif
-
-#ifdef CONFIG_PAX_REFCOUNT
-#define BUG_BRK_IMM		0x800  /* defined in arm64/include/asm/brk-imm.h */
-#define REFCOUNT_TRAP_INSN "brk	0x800"
-
-#define _ASM_EXTABLE(from, to)					\
-"	.pushsection	__ex_table, \"a\"\n"			\
-"	.align		3\n"					\
-"	.long		(" #from " - .), (" #to " - .)\n"	\
-"	.popsection\n"
-
-
-#define __OVERFLOW_POST			\
-	"	b.vc	3f\n"		\
-	"2:	" REFCOUNT_TRAP_INSN "\n"\
-	"3:\n"
-#define __OVERFLOW_EXTABLE		\
-	"\n4:\n"			\
-	_ASM_EXTABLE(2b, 4b)
-#else
-#define __OVERFLOW_POST
-#define __OVERFLOW_EXTABLE
-#endif
-
 
 /*
  * AArch64 UP and SMP safe atomic ops.  We use load exclusive and
@@ -73,10 +48,8 @@ __LL_SC_PREFIX(atomic_##op(int i, atomic_t *v))				\
 "	prfm	pstl1strm, %2\n"					\
 "1:	ldxr	%w0, %2\n"						\
 "	" #asm_op "	%w0, %w0, %w3\n"				\
-	__OVERFLOW_POST							\
 "	stxr	%w1, %w0, %2\n"						\
 "	cbnz	%w1, 1b"						\
-	__OVERFLOW_EXTABLE						\
 	: "=&r" (result), "=&r" (tmp), "+Q" (v->counter)		\
 	: "Ir" (i));							\
 }									\
@@ -93,10 +66,8 @@ __LL_SC_PREFIX(atomic_##op##_return##name(int i, atomic_t *v))		\
 "	prfm	pstl1strm, %2\n"					\
 "1:	ld" #acq "xr	%w0, %2\n"					\
 "	" #asm_op "	%w0, %w0, %w3\n"				\
-	__OVERFLOW_POST							\
 "	st" #rel "xr	%w1, %w0, %2\n"					\
 "	cbnz	%w1, 1b\n"						\
-	__OVERFLOW_EXTABLE						\
 "	" #mb								\
 	: "=&r" (result), "=&r" (tmp), "+Q" (v->counter)		\
 	: "Ir" (i)							\
@@ -116,13 +87,8 @@ __LL_SC_EXPORT(atomic_##op##_return##name);
 	ATOMIC_OP_RETURN(_acquire,        , a,  , "memory", __VA_ARGS__)\
 	ATOMIC_OP_RETURN(_release,        ,  , l, "memory", __VA_ARGS__)
 
-#ifdef CONFIG_PAX_REFCOUNT
-ATOMIC_OPS_RLX(add, adds)
-ATOMIC_OPS_RLX(sub, subs)
-#else
 ATOMIC_OPS_RLX(add, add)
 ATOMIC_OPS_RLX(sub, sub)
-#endif
 
 ATOMIC_OP(and, and)
 ATOMIC_OP(andnot, bic)
@@ -145,10 +111,8 @@ __LL_SC_PREFIX(atomic64_##op(long i, atomic64_t *v))			\
 "	prfm	pstl1strm, %2\n"					\
 "1:	ldxr	%0, %2\n"						\
 "	" #asm_op "	%0, %0, %3\n"					\
-	 __OVERFLOW_POST                                                \
 "	stxr	%w1, %0, %2\n"						\
 "	cbnz	%w1, 1b"						\
-	__OVERFLOW_EXTABLE                                              \
 	: "=&r" (result), "=&r" (tmp), "+Q" (v->counter)		\
 	: "Ir" (i));							\
 }									\
@@ -165,10 +129,8 @@ __LL_SC_PREFIX(atomic64_##op##_return##name(long i, atomic64_t *v))	\
 "	prfm	pstl1strm, %2\n"					\
 "1:	ld" #acq "xr	%0, %2\n"					\
 "	" #asm_op "	%0, %0, %3\n"					\
-	 __OVERFLOW_POST 						\
 "	st" #rel "xr	%w1, %0, %2\n"					\
 "	cbnz	%w1, 1b\n"						\
-	__OVERFLOW_EXTABLE						\
 "	" #mb								\
 	: "=&r" (result), "=&r" (tmp), "+Q" (v->counter)		\
 	: "Ir" (i)							\
@@ -188,13 +150,8 @@ __LL_SC_EXPORT(atomic64_##op##_return##name);
 	ATOMIC64_OP_RETURN(_acquire,, a,  , "memory", __VA_ARGS__)	\
 	ATOMIC64_OP_RETURN(_release,,  , l, "memory", __VA_ARGS__)
 
-#ifdef CONFIG_PAX_REFCOUNT
-ATOMIC64_OPS_RLX(add, adds)
-ATOMIC64_OPS_RLX(sub, subs)
-#else
 ATOMIC64_OPS_RLX(add, add)
 ATOMIC64_OPS_RLX(sub, sub)
-#endif
 
 ATOMIC64_OP(and, and)
 ATOMIC64_OP(andnot, bic)
@@ -308,183 +265,5 @@ __CMPXCHG_DBL(   ,        ,  ,         )
 __CMPXCHG_DBL(_mb, dmb ish, l, "memory")
 
 #undef __CMPXCHG_DBL
-
-/*  PAX unchecked implementations */
-
-static inline void atomic_add_unchecked(int i, atomic_unchecked_t *v)
-{
-        unsigned long tmp;
-        int result;
-
-        asm volatile("// atomic_add_unchecked\n"
-"1:     ldxr    %w0, %2\n"
-"       add     %w0, %w0, %w3\n"
-"       stxr    %w1, %w0, %2\n"
-"       cbnz    %w1, 1b"
-        : "=&r" (result), "=&r" (tmp), "+Q" (v->counter)
-        : "Ir" (i));
-}
-
-static inline int atomic_add_return_unchecked(int i, atomic_unchecked_t *v)
-{
-        unsigned long tmp;
-        int result;
-
-        asm volatile("// atomic_add_return_unchecked\n"
-"1:     ldxr    %w0, %2\n"
-"       add     %w0, %w0, %w3\n"
-"       stlxr   %w1, %w0, %2\n"
-"       cbnz    %w1, 1b"
-        : "=&r" (result), "=&r" (tmp), "+Q" (v->counter)
-        : "Ir" (i)
-        : "memory");
-
-        smp_mb();
-        return result;
-}
-
-static inline void atomic_sub_unchecked(int i, atomic_unchecked_t *v)
-{
-        unsigned long tmp;
-        int result;
-
-        asm volatile("// atomic_sub_unchecked\n"
-"1:     ldxr    %w0, %2\n"
-"       sub     %w0, %w0, %w3\n"
-"       stxr    %w1, %w0, %2\n"
-"       cbnz    %w1, 1b"
-        : "=&r" (result), "=&r" (tmp), "+Q" (v->counter)
-        : "Ir" (i));
-}
-
-static inline int atomic_sub_return_unchecked(int i, atomic_unchecked_t *v)
-{
-        unsigned long tmp;
-        int result;
-
-        asm volatile("// atomic_sub_return_unchecked\n"
-"1:     ldxr    %w0, %2\n"
-"       sub     %w0, %w0, %w3\n"
-"       stlxr   %w1, %w0, %2\n"
-"       cbnz    %w1, 1b"
-        : "=&r" (result), "=&r" (tmp), "+Q" (v->counter)
-        : "Ir" (i)
-        : "memory");
-
-        smp_mb();
-        return result;
-}
-
-
-static inline int atomic_cmpxchg_unchecked(atomic_unchecked_t *ptr, int old, int new)
-{
-        unsigned long tmp;
-        int oldval;
-
-        smp_mb();
-
-        asm volatile("// atomic_cmpxchg_unchecked\n"
-"1:     ldxr    %w1, %2\n"
-"       cmp     %w1, %w3\n"
-"       b.ne    2f\n"
-"       stxr    %w0, %w4, %2\n"
-"       cbnz    %w0, 1b\n"
-"2:"
-        : "=&r" (tmp), "=&r" (oldval), "+Q" (ptr->counter)
-        : "Ir" (old), "r" (new)
-        : "cc");
-
-        smp_mb();
-        return oldval;
-}
-
-
-static inline void atomic64_add_unchecked(u64 i, atomic64_unchecked_t *v)
-{
-        long result;
-        unsigned long tmp;
-
-        asm volatile("// atomic64_add_unchecked\n"
-"1:     ldxr    %0, %2\n"
-"       add     %0, %0, %3\n"
-"       stxr    %w1, %0, %2\n"
-"       cbnz    %w1, 1b"
-        : "=&r" (result), "=&r" (tmp), "+Q" (v->counter)
-        : "Ir" (i));
-}
-
-static inline long atomic64_add_return_unchecked(long i, atomic64_unchecked_t *v)
-{
-        long result;
-        unsigned long tmp;
-
-        asm volatile("// atomic64_add_return_unchecked\n"
-"1:     ldxr    %0, %2\n"
-"       add     %0, %0, %3\n"
-"       stlxr   %w1, %0, %2\n"
-"       cbnz    %w1, 1b"
-        : "=&r" (result), "=&r" (tmp), "+Q" (v->counter)
-        : "Ir" (i)
-        : "memory");
-
-        smp_mb();
-        return result;
-}
-
-static inline void atomic64_sub_unchecked(u64 i, atomic64_unchecked_t *v)
-{
-        long result;
-        unsigned long tmp;
-
-        asm volatile("// atomic64_sub_unchecked\n"
-"1:     ldxr    %0, %2\n"
-"       sub     %0, %0, %3\n"
-"       stxr    %w1, %0, %2\n"
-"       cbnz    %w1, 1b"
-        : "=&r" (result), "=&r" (tmp), "+Q" (v->counter)
-        : "Ir" (i));
-}
-
-static inline long atomic64_sub_return_unchecked(u64 i, atomic64_unchecked_t *v)
-{
-        long result = 0;
-        unsigned long tmp;
-
-        asm volatile("// atomic64_sub_unchecked\n"
-"1:     ldxr    %0, %2\n"
-"       sub     %0, %0, %3\n"
-"       stxr    %w1, %0, %2\n"
-"       cbnz    %w1, 1b"
-        : "=&r" (result), "=&r" (tmp), "+Q" (v->counter)
-        : "Ir" (i)
-	: "memory");
-	smp_mb();
-
-        return result;
-}
-
-
-static inline long atomic64_cmpxchg_unchecked(atomic64_unchecked_t *ptr, long old, long new)
-{
-        long oldval;
-        unsigned long res;
-
-        smp_mb();
-
-        asm volatile("// atomic64_cmpxchg\n"
-"1:     ldxr    %1, %2\n"
-"       cmp     %1, %3\n"
-"       b.ne    2f\n"
-"       stxr    %w0, %4, %2\n"
-"       cbnz    %w0, 1b\n"
-"2:"
-        : "=&r" (res), "=&r" (oldval), "+Q" (ptr->counter)
-        : "Ir" (old), "r" (new)
-        : "cc");
-
-        smp_mb();
-        return oldval;
-}
-
 
 #endif	/* __ASM_ATOMIC_LL_SC_H */

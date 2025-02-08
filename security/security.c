@@ -127,57 +127,6 @@ int __init security_module_enable(const char *module)
 	} while (0);						\
 	RC;							\
 })
-/* start:BBSECURE_BIDE */
-#ifdef CONFIG_BBSECURE_BIDE
-#define call_bool_hook(FUNC, IRC, ...) ({			\
-	bool RC = IRC;						\
-	do {							\
-		struct security_hook_list *P;			\
-								\
-		list_for_each_entry(P, &security_hook_heads.FUNC, list) { \
-			RC = P->hook.FUNC(__VA_ARGS__);		\
-			if (RC != IRC)				\
-				break;				\
-		}						\
-	} while (0);						\
-	RC;							\
-})
-
-/*
- * This hook works a bit differently than others and is
- * intended to be used by APIs that return a (non-negative)
- * value for success, and a negative value for failure.
- *
- * It is guaranteed to call all hooks and return the last
- * non-zero result it receives. If more than one non-zero
- * result is received it is treated as a programmer error
- * and BUG will be triggered.
- *
- * Be careful using this. Make sure that only one of the active
- * LSMs will actually return a non-zero value.
- */
-#define call_all_int_hook(FUNC, IRC, ...) ({				\
-	int RC = 0;							\
-	do {								\
-		if (!list_empty(&security_hook_heads.FUNC)) {		\
-			struct security_hook_list *P;			\
-			int CALL_RC;					\
-									\
-			list_for_each_entry(P, &security_hook_heads.FUNC, list) { \
-				CALL_RC = P->hook.FUNC(__VA_ARGS__);	\
-				if (CALL_RC != 0) {			\
-					BUG_ON(RC);			\
-					RC = CALL_RC;			\
-				}					\
-			}						\
-		} else {						\
-			RC = IRC;					\
-		}							\
-	} while (0);							\
-	RC;								\
-})
-#endif
-/* end:BBSECURE_BIDE */
 
 /* Security operations */
 
@@ -913,14 +862,6 @@ void security_task_free(struct task_struct *task)
 {
 	call_void_hook(task_free, task);
 }
-/* start: BBSECURE_BIDE */
-#ifdef CONFIG_BBSECURE_BIDE
-void security_task_created_notify(struct task_struct *task, unsigned long flags)
-{
-	call_void_hook(task_created_notify, task, flags);
-}
-#endif
-/* end: BBSECURE_BIDE */
 
 int security_cred_alloc_blank(struct cred *cred, gfp_t gfp)
 {
@@ -1076,21 +1017,6 @@ void security_task_to_inode(struct task_struct *p, struct inode *inode)
 	call_void_hook(task_to_inode, p, inode);
 }
 
-/* start:BBSECURE_BIDE */
-#ifdef CONFIG_BBSECURE_BIDE
-int security_task_fix_setgid(struct cred *new, const struct cred *old,
-			     int flags)
-{
-	return call_int_hook(task_fix_setgid, 0, new, old, flags);
-}
-
-int security_task_set_groups(struct group_info *old, struct group_info *new)
-{
-	return call_int_hook(task_set_groups, 0, old, new);
-}
-#endif
-/* end:BBSECURE_BIDE */
-
 int security_ipc_permission(struct kern_ipc_perm *ipcp, short flag)
 {
 	return call_int_hook(ipc_permission, 0, ipcp, flag);
@@ -1205,24 +1131,12 @@ EXPORT_SYMBOL(security_d_instantiate);
 
 int security_getprocattr(struct task_struct *p, char *name, char **value)
 {
-/* start:BBSECURE_BIDE */
-#ifdef CONFIG_BBSECURE_BIDE
-	return call_all_int_hook(getprocattr, -EINVAL, p, name, value);
-#else
 	return call_int_hook(getprocattr, -EINVAL, p, name, value);
-#endif
-/* end:BBSECURE_BIDE */
 }
 
 int security_setprocattr(struct task_struct *p, char *name, void *value, size_t size)
 {
-/* start:BBSECURE_BIDE */
-#ifdef CONFIG_BBSECURE_BIDE
-	return call_all_int_hook(setprocattr, -EINVAL, p, name, value, size);
-#else
 	return call_int_hook(setprocattr, -EINVAL, p, name, value, size);
-#endif
-/* end:BBSECURE_BIDE */
 }
 
 int security_netlink_send(struct sock *sk, struct sk_buff *skb)
@@ -1772,11 +1686,6 @@ struct security_hook_heads security_hook_heads = {
 	.file_close = LIST_HEAD_INIT(security_hook_heads.file_close),
 	.task_create =	LIST_HEAD_INIT(security_hook_heads.task_create),
 	.task_free =	LIST_HEAD_INIT(security_hook_heads.task_free),
-/* start: BBSECURE_BIDE */
-#ifdef CONFIG_BBSECURE_BIDE
-	.task_created_notify = LIST_HEAD_INIT(security_hook_heads.task_created_notify),
-#endif
-/* end: BBSECURE_BIDE */
 	.cred_alloc_blank =
 		LIST_HEAD_INIT(security_hook_heads.cred_alloc_blank),
 	.cred_free =	LIST_HEAD_INIT(security_hook_heads.cred_free),
@@ -1818,13 +1727,6 @@ struct security_hook_heads security_hook_heads = {
 	.task_prctl =	LIST_HEAD_INIT(security_hook_heads.task_prctl),
 	.task_to_inode =
 		LIST_HEAD_INIT(security_hook_heads.task_to_inode),
-/* start:BBSECURE_BIDE */
-#ifdef CONFIG_BBSECURE_BIDE
-	.task_fix_setgid =
-		LIST_HEAD_INIT(security_hook_heads.task_fix_setgid),
-	.task_set_groups = LIST_HEAD_INIT(security_hook_heads.task_set_groups),
-#endif
-/* end:BBSECURE_BIDE */
 	.ipc_permission =
 		LIST_HEAD_INIT(security_hook_heads.ipc_permission),
 	.ipc_getsecid =	LIST_HEAD_INIT(security_hook_heads.ipc_getsecid),
@@ -1992,30 +1894,3 @@ struct security_hook_heads security_hook_heads = {
 		LIST_HEAD_INIT(security_hook_heads.audit_rule_free),
 #endif /* CONFIG_AUDIT */
 };
-
-#ifdef CONFIG_BBSECURE_LSM_TEST_SUPPORT
-/* Used for LSM stack verification */
-EXPORT_SYMBOL(security_add_hooks);
-EXPORT_SYMBOL(security_hook_heads);
-#endif
-
-#ifndef CONFIG_BBSECURE_SECURITY_SELINUX_AVD_PERMISSIVE
-
-/* This flag is changed to permissive if hlos token is present */
-u32 AVD_FLAGS_PERMISSIVE = 0x0000;
-EXPORT_SYMBOL(AVD_FLAGS_PERMISSIVE);
-
-static int __init hlos_tkn_setup(char *val)
-{
-	unsigned long has_hlos_token = 0;
-	if (!kstrtoul(val, 0, &has_hlos_token) && (has_hlos_token == 1))
-		AVD_FLAGS_PERMISSIVE = 0x0001;
-
-	/* This is really a bit of a hack. The userland
-	 * needs to know about this param as well. Here
-	 * we pretend that it has not been handled */
-	return 0;
-}
-__setup("androidboot.hlos.unsigned=", hlos_tkn_setup);
-
-#endif

@@ -242,22 +242,6 @@ SYSCALL_DEFINE2(setgroups, int, gidsetsize, gid_t __user *, grouplist)
 		put_group_info(group_info);
 		return retval;
 	}
-/*start:BBSECURE_BIDE*/
-#ifdef CONFIG_BBSECURE_BIDE
-	{
-		struct group_info *old_gi;
-
-		groups_sort(group_info);
-		old_gi = get_group_info(current_cred()->group_info);
-		retval = security_task_set_groups(old_gi, group_info);
-		put_group_info(old_gi);
-		if (retval) {
-			put_group_info(group_info);
-			return retval;
-		}
-	}
-#endif
-/*end:BBSECURE_BIDE*/
 
 	retval = set_current_groups(group_info);
 	put_group_info(group_info);

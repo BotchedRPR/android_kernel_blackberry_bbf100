@@ -4,7 +4,6 @@
 #include <linux/compiler.h>
 #include <linux/stringify.h>
 #include <linux/export.h>
-#include <linux/protected.h>
 #include <asm/linkage.h>
 
 /* Some toolchains use other characters (e.g. '`') to mark new line in macro */
