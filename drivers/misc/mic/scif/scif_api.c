@@ -1486,12 +1486,10 @@ int scif_client_register(struct scif_client *client)
 {
 	struct subsys_interface *si = &client->si;
 
-	pax_open_kernel();
-	*(const char **)&si->name = client->name;
-	*(struct bus_type **)&si->subsys = &scif_peer_bus;
-	*(void **)&si->add_dev = scif_add_client_dev;
-	*(void **)&si->remove_dev = scif_remove_client_dev;
-	pax_close_kernel();
+	si->name = client->name;
+	si->subsys = &scif_peer_bus;
+	si->add_dev = scif_add_client_dev;
+	si->remove_dev = scif_remove_client_dev;
 
 	return subsys_interface_register(&client->si);
 }

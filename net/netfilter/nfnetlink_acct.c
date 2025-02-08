@@ -263,11 +263,10 @@ nfnl_acct_get(struct sock *nfnl, struct sk_buff *skb,
 	char *acct_name;
 
 	if (nlh->nlmsg_flags & NLM_F_DUMP) {
-		static struct netlink_dump_control c = {
+		struct netlink_dump_control c = {
 			.dump = nfnl_acct_dump,
 			.done = nfnl_acct_done,
 		};
-		void *data = NULL;
 
 		if (tb[NFACCT_FILTER]) {
 			struct nfacct_filter *filter;
@@ -276,9 +275,9 @@ nfnl_acct_get(struct sock *nfnl, struct sk_buff *skb,
 			if (IS_ERR(filter))
 				return PTR_ERR(filter);
 
-			data = filter;
+			c.data = filter;
 		}
-		return __netlink_dump_start(nfnl, skb, nlh, &c, data, THIS_MODULE);
+		return netlink_dump_start(nfnl, skb, nlh, &c);
 	}
 
 	if (!tb[NFACCT_NAME])

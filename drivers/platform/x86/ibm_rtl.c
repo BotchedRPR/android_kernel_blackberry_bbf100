@@ -227,7 +227,7 @@ static void rtl_teardown_sysfs(void) {
 }
 
 
-static const struct dmi_system_id __initconst ibm_rtl_dmi_table[] = {
+static struct dmi_system_id __initdata ibm_rtl_dmi_table[] = {
 	{                                                  \
 		.matches = {                               \
 			DMI_MATCH(DMI_SYS_VENDOR, "IBM"),  \

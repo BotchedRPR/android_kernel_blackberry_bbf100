@@ -322,7 +322,14 @@ static void nft_match_eval(const struct nft_expr *expr,
 		return;
 	}
 
-	regs->verdict.code = ret ? NFT_CONTINUE : NFT_BREAK;
+	switch (ret ? 1 : 0) {
+	case 1:
+		regs->verdict.code = NFT_CONTINUE;
+		break;
+	case 0:
+		regs->verdict.code = NFT_BREAK;
+		break;
+	}
 }
 
 static const struct nla_policy nft_match_policy[NFTA_MATCH_MAX + 1] = {

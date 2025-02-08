@@ -1,7 +1,6 @@
 /*
  *  linux/init/main.c
  *
- *  Copyright (C) 2018 BlackBerry Limited. All rights reserved.
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *
  *  GK 2/5/95  -  Changed to support mounting root fs via NFS
@@ -95,8 +94,6 @@ extern void init_IRQ(void);
 extern void fork_init(void);
 extern void radix_tree_init(void);
 
-extern void grsecurity_init(void);
-
 /*
  * Debug helper: via this flag we know that we are in 'early bootup code'
  * where only the boot processor is running with IRQ disabled.  This means
@@ -157,48 +154,6 @@ static int __init set_reset_devices(char *str)
 }
 
 __setup("reset_devices", set_reset_devices);
-
-#ifdef CONFIG_GRKERNSEC_PROC_USERGROUP
-kgid_t grsec_proc_gid = KGIDT_INIT(CONFIG_GRKERNSEC_PROC_GID);
-static int __init setup_grsec_proc_gid(char *str)
-{
-	grsec_proc_gid = KGIDT_INIT(simple_strtol(str, NULL, 0));
-	return 1;
-}
-__setup("grsec_proc_gid=", setup_grsec_proc_gid);
-#endif
-#ifdef CONFIG_GRKERNSEC_SYSFS_RESTRICT
-int grsec_enable_sysfs_restrict = 1;
-static int __init setup_grsec_sysfs_restrict(char *str)
-{
-	if (!simple_strtol(str, NULL, 0))
-		grsec_enable_sysfs_restrict = 0;
-	return 1;
-}
-__setup("grsec_sysfs_restrict", setup_grsec_sysfs_restrict);
-#endif
-
-#ifdef CONFIG_PAX_SOFTMODE
-int pax_softmode;
-
-static int __init setup_pax_softmode(char *str)
-{
-	get_option(&str, &pax_softmode);
-	return 1;
-}
-__setup("pax_softmode=", setup_pax_softmode);
-#endif
-
-#ifdef CONFIG_PAX_SIZE_OVERFLOW
-bool pax_size_overflow_report_only __read_only;
-
-static int __init setup_pax_size_overflow_report_only(char *str)
-{
-	pax_size_overflow_report_only = true;
-	return 0;
-}
-early_param("pax_size_overflow_report_only", setup_pax_size_overflow_report_only);
-#endif
 
 static const char *argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 const char *envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
@@ -330,20 +285,8 @@ static int __init unknown_bootoption(char *param, char *val,
 		return 0;
 
 	/* Unused module parameter. */
-#ifndef CONFIG_BBSECURE_FSBASE
 	if (strchr(param, '.') && (!val || strchr(param, '.') < val))
-#else
-	if (strchr(param, '.') && (!val || strchr(param, '.') < val)) {
-            if (param && (!strncmp(param, "androidboot.hlos.unsigned",
-                strlen("androidboot.hlos.unsigned"))) && val &&
-                (!strncmp(val, "1", 1)))
-                val = '\0';
-            else
-#endif // CONFIG_BBSECURE_FSBASE
 		return 0;
-#ifdef CONFIG_BBSECURE_FSBASE
-	}
-#endif // CONFIG_BBSECURE_FSBASE
 
 	if (panic_later)
 		return 0;
@@ -588,10 +531,6 @@ asmlinkage __visible void __init start_kernel(void)
 	build_all_zonelists(NULL, NULL);
 	page_alloc_init();
 
-#if defined(CONFIG_TCT_CHG_AUTOTEST)
-	pr_err("TCTNB_KERNEL_START\n");
-#endif
-
 	pr_notice("Kernel command line: %s\n", boot_command_line);
 	parse_early_param();
 	after_dashes = parse_args("Booting kernel",
@@ -788,7 +727,7 @@ static bool __init_or_module initcall_blacklisted(initcall_t fn)
 	struct blacklist_entry *entry;
 	char *fn_name;
 
-	fn_name = kasprintf(GFP_KERNEL, "%pX", fn);
+	fn_name = kasprintf(GFP_KERNEL, "%pf", fn);
 	if (!fn_name)
 		return false;
 
@@ -840,7 +779,7 @@ int __init_or_module do_one_initcall(initcall_t fn)
 {
 	int count = preempt_count();
 	int ret;
-	const char *msg1 = "", *msg2 = "";
+	char msgbuf[64];
 
 	if (initcall_blacklisted(fn))
 		return -EPERM;
@@ -850,17 +789,18 @@ int __init_or_module do_one_initcall(initcall_t fn)
 	else
 		ret = fn();
 
+	msgbuf[0] = 0;
+
 	if (preempt_count() != count) {
-		msg1 = " preemption imbalance";
+		sprintf(msgbuf, "preemption imbalance ");
 		preempt_count_set(count);
 	}
 	if (irqs_disabled()) {
-		msg2 = " disabled interrupts";
+		strlcat(msgbuf, "disabled interrupts ", sizeof(msgbuf));
 		local_irq_enable();
 	}
-	WARN(*msg1 || *msg2, "initcall %pF returned with%s%s\n", fn, msg1, msg2);
+	WARN(msgbuf[0], "initcall %pF returned with %s\n", fn, msgbuf);
 
-	add_latent_entropy();
 	return ret;
 }
 
@@ -965,8 +905,8 @@ static int run_init_process(const char *init_filename)
 {
 	argv_init[0] = init_filename;
 	return do_execve(getname_kernel(init_filename),
-		(const char __user *const __force_user *)argv_init,
-		(const char __user *const __force_user *)envp_init);
+		(const char __user *const __user *)argv_init,
+		(const char __user *const __user *)envp_init);
 }
 
 static int try_to_run_init_process(const char *init_filename)
@@ -982,10 +922,6 @@ static int try_to_run_init_process(const char *init_filename)
 
 	return ret;
 }
-
-#ifdef CONFIG_GRKERNSEC_CHROOT_INITRD
-extern int gr_init_ran;
-#endif
 
 static noinline void __init kernel_init_freeable(void);
 
@@ -1032,11 +968,6 @@ static int __ref kernel_init(void *unused)
 		pr_err("Failed to execute %s (error %d)\n",
 		       ramdisk_execute_command, ret);
 	}
-
-#ifdef CONFIG_GRKERNSEC_CHROOT_INITRD
-	/* if no initrd was used, be extra sure we enforce chroot restrictions */
-	gr_init_ran = 1;
-#endif
 
 	/*
 	 * We try each of these until one succeeds.
@@ -1095,7 +1026,7 @@ static noinline void __init kernel_init_freeable(void)
 	do_basic_setup();
 
 	/* Open the /dev/console on the rootfs, this should never fail */
-	if (sys_open((const char __force_user *) "/dev/console", O_RDWR, 0) < 0)
+	if (sys_open((const char __user *) "/dev/console", O_RDWR, 0) < 0)
 		pr_err("Warning: unable to open an initial console.\n");
 
 	(void) sys_dup(0);
@@ -1108,12 +1039,10 @@ static noinline void __init kernel_init_freeable(void)
 	if (!ramdisk_execute_command)
 		ramdisk_execute_command = "/init";
 
-	if (sys_access((const char __force_user *) ramdisk_execute_command, 0) != 0) {
+	if (sys_access((const char __user *) ramdisk_execute_command, 0) != 0) {
 		ramdisk_execute_command = NULL;
 		prepare_namespace();
 	}
-
-	grsecurity_init();
 
 	/*
 	 * Ok, we have completed the initial bootup, and

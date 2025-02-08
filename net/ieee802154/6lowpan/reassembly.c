@@ -492,13 +492,14 @@ static struct ctl_table lowpan_frags_ctl_table[] = {
 
 static int __net_init lowpan_frags_ns_sysctl_register(struct net *net)
 {
-	ctl_table_no_const *table = NULL;
+	struct ctl_table *table;
 	struct ctl_table_header *hdr;
 	struct netns_ieee802154_lowpan *ieee802154_lowpan =
 		net_ieee802154_lowpan(net);
 
+	table = lowpan_frags_ns_ctl_table;
 	if (!net_eq(net, &init_net)) {
-		table = kmemdup(lowpan_frags_ns_ctl_table, sizeof(lowpan_frags_ns_ctl_table),
+		table = kmemdup(table, sizeof(lowpan_frags_ns_ctl_table),
 				GFP_KERNEL);
 		if (table == NULL)
 			goto err_alloc;
@@ -513,9 +514,9 @@ static int __net_init lowpan_frags_ns_sysctl_register(struct net *net)
 		/* Don't export sysctls to unprivileged users */
 		if (net->user_ns != &init_user_ns)
 			table[0].procname = NULL;
-		hdr = register_net_sysctl(net, "net/ieee802154/6lowpan", table);
-	} else
-		hdr = register_net_sysctl(net, "net/ieee802154/6lowpan", lowpan_frags_ns_ctl_table);
+	}
+
+	hdr = register_net_sysctl(net, "net/ieee802154/6lowpan", table);
 	if (hdr == NULL)
 		goto err_reg;
 
@@ -523,7 +524,8 @@ static int __net_init lowpan_frags_ns_sysctl_register(struct net *net)
 	return 0;
 
 err_reg:
-	kfree(table);
+	if (!net_eq(net, &init_net))
+		kfree(table);
 err_alloc:
 	return -ENOMEM;
 }

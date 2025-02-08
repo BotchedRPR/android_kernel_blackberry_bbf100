@@ -53,9 +53,7 @@ static int kgdb_nmi_console_setup(struct console *co, char *options)
 	 * I/O utilities that messages sent to the console will automatically
 	 * be displayed on the dbg_io.
 	 */
-	pax_open_kernel();
-	*(int *)&dbg_io_ops->is_console = true;
-	pax_close_kernel();
+	dbg_io_ops->is_console = true;
 
 	return 0;
 }

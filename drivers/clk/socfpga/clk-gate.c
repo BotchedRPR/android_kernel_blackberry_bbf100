@@ -21,7 +21,6 @@
 #include <linux/mfd/syscon.h>
 #include <linux/of.h>
 #include <linux/regmap.h>
-#include <asm/pgtable.h>
 
 #include "clk.h"
 
@@ -170,7 +169,7 @@ static int socfpga_clk_prepare(struct clk_hw *hwclk)
 	return 0;
 }
 
-static clk_ops_no_const gateclk_ops __read_only = {
+static struct clk_ops gateclk_ops = {
 	.prepare = socfpga_clk_prepare,
 	.recalc_rate = socfpga_clk_recalc_rate,
 	.get_parent = socfpga_clk_get_parent,
@@ -203,10 +202,8 @@ static void __init __socfpga_gate_init(struct device_node *node,
 		socfpga_clk->hw.reg = clk_mgr_base_addr + clk_gate[0];
 		socfpga_clk->hw.bit_idx = clk_gate[1];
 
-		pax_open_kernel();
-		*(void **)&gateclk_ops.enable = clk_gate_ops.enable;
-		*(void **)&gateclk_ops.disable = clk_gate_ops.disable;
-		pax_close_kernel();
+		gateclk_ops.enable = clk_gate_ops.enable;
+		gateclk_ops.disable = clk_gate_ops.disable;
 	}
 
 	rc = of_property_read_u32(node, "fixed-divider", &fixed_div);

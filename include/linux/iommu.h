@@ -246,7 +246,7 @@ struct iommu_ops {
 	bool (*is_iova_coherent)(struct iommu_domain *domain, dma_addr_t iova);
 	unsigned long pgsize_bitmap;
 	void *priv;
-} __do_const;
+};
 
 #define IOMMU_GROUP_NOTIFY_ADD_DEVICE		1 /* Device added */
 #define IOMMU_GROUP_NOTIFY_DEL_DEVICE		2 /* Pre Device removed */

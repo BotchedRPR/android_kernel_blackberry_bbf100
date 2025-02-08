@@ -29,7 +29,6 @@ extern Elf32_Dyn _DYNAMIC [];
 #define elf_note	elf32_note
 #define elf_addr_t	Elf32_Off
 #define Elf_Half	Elf32_Half
-#define elf_dyn		Elf32_Dyn
 
 #else
 
@@ -40,7 +39,6 @@ extern Elf64_Dyn _DYNAMIC [];
 #define elf_note	elf64_note
 #define elf_addr_t	Elf64_Off
 #define Elf_Half	Elf64_Half
-#define elf_dyn		Elf64_Dyn
 
 #endif
 

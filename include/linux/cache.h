@@ -21,14 +21,6 @@
 #define __read_mostly
 #endif
 
-#ifndef __read_only
-#ifdef CONFIG_PAX_KERNEXEC
-#error KERNEXEC requires __read_only
-#else
-#define __read_only __read_mostly
-#endif
-#endif
-
 /*
  * __ro_after_init is used to mark things that are read-only after init (i.e.
  * after mark_rodata_ro() has been called). These are effectively read-only,

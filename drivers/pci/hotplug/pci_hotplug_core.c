@@ -436,10 +436,8 @@ int __pci_hp_register(struct hotplug_slot *slot, struct pci_bus *bus,
 		return -EINVAL;
 	}
 
-	pax_open_kernel();
-	*(struct module **)&slot->ops->owner = owner;
-	*(const char **)&slot->ops->mod_name = mod_name;
-	pax_close_kernel();
+	slot->ops->owner = owner;
+	slot->ops->mod_name = mod_name;
 
 	mutex_lock(&pci_hp_mutex);
 	/*

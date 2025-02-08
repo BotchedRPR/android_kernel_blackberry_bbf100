@@ -982,7 +982,7 @@ static int dma_debug_device_change(struct notifier_block *nb, unsigned long acti
 
 void dma_debug_add_bus(struct bus_type *bus)
 {
-	notifier_block_no_const *nb;
+	struct notifier_block *nb;
 
 	if (dma_debug_disabled())
 		return;

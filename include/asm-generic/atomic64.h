@@ -16,7 +16,6 @@ typedef struct {
 	long long counter;
 } atomic64_t;
 
-
 #define ATOMIC64_INIT(i)	{ (i) }
 
 extern long long atomic64_read(const atomic64_t *v);

@@ -108,7 +108,8 @@ static void *tpm_bios_measurements_start(struct seq_file *m, loff_t *pos)
 	converted_event_type = do_endian_conversion(event->event_type);
 
 	if (((converted_event_type == 0) && (converted_event_size == 0))
-	    || (converted_event_size >= limit - addr - sizeof(struct tcpa_event)))
+	    || ((addr + sizeof(struct tcpa_event) + converted_event_size)
+		>= limit))
 		return NULL;
 
 	return addr;
@@ -137,7 +138,7 @@ static void *tpm_bios_measurements_next(struct seq_file *m, void *v,
 	converted_event_type = do_endian_conversion(event->event_type);
 
 	if (((converted_event_type == 0) && (converted_event_size == 0)) ||
-	    (converted_event_size >= limit - v - sizeof(struct tcpa_event)))
+	    ((v + sizeof(struct tcpa_event) + converted_event_size) >= limit))
 		return NULL;
 
 	(*pos)++;

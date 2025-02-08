@@ -317,7 +317,7 @@ static int proc_sctp_do_hmac_alg(struct ctl_table *ctl, int write,
 				loff_t *ppos)
 {
 	struct net *net = current->nsproxy->net_ns;
-	ctl_table_no_const tbl;
+	struct ctl_table tbl;
 	bool changed = false;
 	char *none = "none";
 	char tmp[8] = {0};
@@ -365,7 +365,7 @@ static int proc_sctp_do_rto_min(struct ctl_table *ctl, int write,
 	struct net *net = current->nsproxy->net_ns;
 	unsigned int min = *(unsigned int *) ctl->extra1;
 	unsigned int max = *(unsigned int *) ctl->extra2;
-	ctl_table_no_const tbl;
+	struct ctl_table tbl;
 	int ret, new_value;
 
 	memset(&tbl, 0, sizeof(struct ctl_table));
@@ -394,7 +394,7 @@ static int proc_sctp_do_rto_max(struct ctl_table *ctl, int write,
 	struct net *net = current->nsproxy->net_ns;
 	unsigned int min = *(unsigned int *) ctl->extra1;
 	unsigned int max = *(unsigned int *) ctl->extra2;
-	ctl_table_no_const tbl;
+	struct ctl_table tbl;
 	int ret, new_value;
 
 	memset(&tbl, 0, sizeof(struct ctl_table));
@@ -432,7 +432,7 @@ static int proc_sctp_do_auth(struct ctl_table *ctl, int write,
 			     loff_t *ppos)
 {
 	struct net *net = current->nsproxy->net_ns;
-	ctl_table_no_const tbl;
+	struct ctl_table tbl;
 	int new_value, ret;
 
 	memset(&tbl, 0, sizeof(struct ctl_table));
@@ -459,7 +459,7 @@ static int proc_sctp_do_auth(struct ctl_table *ctl, int write,
 
 int sctp_sysctl_net_register(struct net *net)
 {
-	ctl_table_no_const *table;
+	struct ctl_table *table;
 	int i;
 
 	table = kmemdup(sctp_net_table, sizeof(sctp_net_table), GFP_KERNEL);

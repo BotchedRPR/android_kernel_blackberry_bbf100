@@ -207,9 +207,7 @@ void fb_deferred_io_init(struct fb_info *info)
 
 	BUG_ON(!fbdefio);
 	mutex_init(&fbdefio->lock);
-	pax_open_kernel();
-	*(void **)&info->fbops->fb_mmap = fb_deferred_io_mmap;
-	pax_close_kernel();
+	info->fbops->fb_mmap = fb_deferred_io_mmap;
 	INIT_DELAYED_WORK(&info->deferred_work, fb_deferred_io_work);
 	INIT_LIST_HEAD(&fbdefio->pagelist);
 	if (fbdefio->delay == 0) /* set a default of 1 s */
@@ -240,7 +238,7 @@ void fb_deferred_io_cleanup(struct fb_info *info)
 		page->mapping = NULL;
 	}
 
-	*(void **)&info->fbops->fb_mmap = NULL;
+	info->fbops->fb_mmap = NULL;
 	mutex_destroy(&fbdefio->lock);
 }
 EXPORT_SYMBOL_GPL(fb_deferred_io_cleanup);

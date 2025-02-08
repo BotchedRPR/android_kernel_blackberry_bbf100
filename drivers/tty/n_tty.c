@@ -1507,7 +1507,7 @@ n_tty_receive_char_lnext(struct tty_struct *tty, unsigned char c, char flag)
 
 static void
 n_tty_receive_buf_real_raw(struct tty_struct *tty, const unsigned char *cp,
-			   char *fp, size_t count)
+			   char *fp, int count)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 	size_t n, head;
@@ -1527,7 +1527,7 @@ n_tty_receive_buf_real_raw(struct tty_struct *tty, const unsigned char *cp,
 
 static void
 n_tty_receive_buf_raw(struct tty_struct *tty, const unsigned char *cp,
-		      char *fp, size_t count)
+		      char *fp, int count)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 	char flag = TTY_NORMAL;
@@ -1544,7 +1544,7 @@ n_tty_receive_buf_raw(struct tty_struct *tty, const unsigned char *cp,
 
 static void
 n_tty_receive_buf_closing(struct tty_struct *tty, const unsigned char *cp,
-			  char *fp, size_t count)
+			  char *fp, int count)
 {
 	char flag = TTY_NORMAL;
 
@@ -1560,7 +1560,7 @@ n_tty_receive_buf_closing(struct tty_struct *tty, const unsigned char *cp,
 
 static void
 n_tty_receive_buf_standard(struct tty_struct *tty, const unsigned char *cp,
-			  char *fp, size_t count)
+			  char *fp, int count)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 	char flag = TTY_NORMAL;
@@ -1594,7 +1594,7 @@ n_tty_receive_buf_standard(struct tty_struct *tty, const unsigned char *cp,
 
 static void
 n_tty_receive_buf_fast(struct tty_struct *tty, const unsigned char *cp,
-		       char *fp, size_t count)
+		       char *fp, int count)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 	char flag = TTY_NORMAL;
@@ -1619,7 +1619,7 @@ n_tty_receive_buf_fast(struct tty_struct *tty, const unsigned char *cp,
 }
 
 static void __receive_buf(struct tty_struct *tty, const unsigned char *cp,
-			  char *fp, size_t count)
+			  char *fp, int count)
 {
 	struct n_tty_data *ldata = tty->disc_data;
 	bool preops = I_ISTRIP(tty) || (I_IUCLC(tty) && L_IEXTEN(tty));
@@ -1697,10 +1697,10 @@ static void __receive_buf(struct tty_struct *tty, const unsigned char *cp,
  */
 static int
 n_tty_receive_buf_common(struct tty_struct *tty, const unsigned char *cp,
-			 char *fp, size_t count, int flow)
+			 char *fp, int count, int flow)
 {
 	struct n_tty_data *ldata = tty->disc_data;
-	size_t room, n, rcvd = 0, overflow;
+	int room, n, rcvd = 0, overflow;
 
 	down_read(&tty->termios_rwsem);
 
@@ -1723,16 +1723,15 @@ n_tty_receive_buf_common(struct tty_struct *tty, const unsigned char *cp,
 		room = N_TTY_BUF_SIZE - (ldata->read_head - tail);
 		if (I_PARMRK(tty))
 			room = (room + 2) / 3;
-		if (room <= 1) {
+		room--;
+		if (room <= 0) {
 			overflow = ldata->icanon && ldata->canon_head == tail;
-			if (overflow && room == 0)
+			if (overflow && room < 0)
 				ldata->read_head--;
 			room = overflow;
 			ldata->no_room = flow && !room;
-		} else {
-			room--;
+		} else
 			overflow = 0;
-		}
 
 		n = min(count, room);
 		if (!n)
@@ -2547,7 +2546,6 @@ void n_tty_inherit_ops(struct tty_ldisc_ops *ops)
 {
 	*ops = tty_ldisc_N_TTY;
 	ops->owner = NULL;
-	atomic_set(&ops->refcount, 0);
-	ops->flags = 0;
+	ops->refcount = ops->flags = 0;
 }
 EXPORT_SYMBOL_GPL(n_tty_inherit_ops);

@@ -14,7 +14,6 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/atomic.h>
-#include <linux/module.h>
 
 #include "u_uac1.h"
 

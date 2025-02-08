@@ -176,17 +176,15 @@ static struct attribute_group efi_subsys_attr_group = {
 };
 
 static struct efivars generic_efivars;
-static efivar_operations_no_const generic_ops __read_only;
+static struct efivar_operations generic_ops;
 
 static int generic_ops_register(void)
 {
-	pax_open_kernel();
-	*(void **)&generic_ops.get_variable = efi.get_variable;
-	*(void **)&generic_ops.set_variable = efi.set_variable;
-	*(void **)&generic_ops.set_variable_nonblocking = efi.set_variable_nonblocking;
-	*(void **)&generic_ops.get_next_variable = efi.get_next_variable;
-	*(void **)&generic_ops.query_variable_store = efi_query_variable_store;
-	pax_close_kernel();
+	generic_ops.get_variable = efi.get_variable;
+	generic_ops.set_variable = efi.set_variable;
+	generic_ops.set_variable_nonblocking = efi.set_variable_nonblocking;
+	generic_ops.get_next_variable = efi.get_next_variable;
+	generic_ops.query_variable_store = efi_query_variable_store;
 
 	return efivars_register(&generic_efivars, &generic_ops, efi_kobj);
 }

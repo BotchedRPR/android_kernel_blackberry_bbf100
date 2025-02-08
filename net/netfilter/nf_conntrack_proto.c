@@ -52,7 +52,7 @@ nf_ct_register_sysctl(struct net *net,
 
 static void
 nf_ct_unregister_sysctl(struct ctl_table_header **header,
-			ctl_table_no_const **table,
+			struct ctl_table **table,
 			unsigned int users)
 {
 	if (users > 0)

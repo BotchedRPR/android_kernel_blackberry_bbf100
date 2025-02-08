@@ -67,7 +67,7 @@ static int proc_local_port_range(struct ctl_table *table, int write,
 {
 	int ret;
 	int range[2] = {local_port_range[0], local_port_range[1]};
-	ctl_table_no_const tmp = {
+	struct ctl_table tmp = {
 		.data = &range,
 		.maxlen = sizeof(range),
 		.mode = table->mode,

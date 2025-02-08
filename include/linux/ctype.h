@@ -56,7 +56,7 @@ static inline unsigned char __toupper(unsigned char c)
  * Fast implementation of tolower() for internal usage. Do not use in your
  * code.
  */
-static inline unsigned char _tolower(const unsigned char c)
+static inline char _tolower(const char c)
 {
 	return c | 0x20;
 }

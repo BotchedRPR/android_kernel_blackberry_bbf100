@@ -429,12 +429,6 @@ ip6t_do_table(struct sk_buff *skb,
 			}
 			if (table_base + v != ip6t_next_entry(e) &&
 			    !(e->ipv6.flags & IP6T_F_GOTO)) {
-				/* MODIFIED-BEGIN by tongyuan.lv, 2018-06-07,BUG-6383935*/
-				if (unlikely(stackidx >= private->stacksize)) {
-					verdict = NF_DROP;
-					break;
-				}
-				/* MODIFIED-END by tongyuan.lv,BUG-6383935*/
 				jumpstack[stackidx++] = e;
 			}
 
@@ -1104,14 +1098,14 @@ static int compat_table_info(const struct xt_table_info *info,
 #endif
 
 static int get_info(struct net *net, void __user *user,
-		    int len, int compat)
+		    const int *len, int compat)
 {
 	char name[XT_TABLE_MAXNAMELEN];
 	struct xt_table *t;
 	int ret;
 
-	if (len != sizeof(struct ip6t_getinfo)) {
-		duprintf("length %u != %zu\n", len,
+	if (*len != sizeof(struct ip6t_getinfo)) {
+		duprintf("length %u != %zu\n", *len,
 			 sizeof(struct ip6t_getinfo));
 		return -EINVAL;
 	}
@@ -1148,7 +1142,7 @@ static int get_info(struct net *net, void __user *user,
 		info.size = private->size;
 		strcpy(info.name, name);
 
-		if (copy_to_user(user, &info, len) != 0)
+		if (copy_to_user(user, &info, *len) != 0)
 			ret = -EFAULT;
 		else
 			ret = 0;
@@ -1183,7 +1177,6 @@ get_entries(struct net *net, struct ip6t_get_entries __user *uptr,
 			 *len, sizeof(get) + get.size);
 		return -EINVAL;
 	}
-	get.name[sizeof(get.name) - 1] = '\0';
 
 	t = xt_find_table_lock(net, AF_INET6, get.name);
 	if (!IS_ERR_OR_NULL(t)) {
@@ -1802,7 +1795,6 @@ compat_get_entries(struct net *net, struct compat_ip6t_get_entries __user *uptr,
 			 *len, sizeof(get) + get.size);
 		return -EINVAL;
 	}
-	get.name[sizeof(get.name) - 1] = '\0';
 
 	xt_compat_lock(AF_INET6);
 	t = xt_find_table_lock(net, AF_INET6, get.name);
@@ -1841,7 +1833,7 @@ compat_do_ip6t_get_ctl(struct sock *sk, int cmd, void __user *user, int *len)
 
 	switch (cmd) {
 	case IP6T_SO_GET_INFO:
-		ret = get_info(sock_net(sk), user, *len, 1);
+		ret = get_info(sock_net(sk), user, len, 1);
 		break;
 	case IP6T_SO_GET_ENTRIES:
 		ret = compat_get_entries(sock_net(sk), user, len);
@@ -1888,7 +1880,7 @@ do_ip6t_get_ctl(struct sock *sk, int cmd, void __user *user, int *len)
 
 	switch (cmd) {
 	case IP6T_SO_GET_INFO:
-		ret = get_info(sock_net(sk), user, *len, 0);
+		ret = get_info(sock_net(sk), user, len, 0);
 		break;
 
 	case IP6T_SO_GET_ENTRIES:

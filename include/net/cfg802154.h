@@ -341,7 +341,7 @@ struct wpan_dev {
 	/* MAC BSN field */
 	atomic_t bsn;
 	/* MAC DSN field */
-	atomic_unchecked_t dsn;
+	atomic_t dsn;
 
 	u8 min_be;
 	u8 max_be;

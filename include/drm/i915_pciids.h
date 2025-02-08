@@ -37,7 +37,7 @@
  */
 #define INTEL_VGA_DEVICE(id, info) {		\
 	0x8086,	id,				\
-	PCI_ANY_ID, PCI_ANY_ID,			\
+	~0, ~0,					\
 	0x030000, 0xff0000,			\
 	(unsigned long) info }
 

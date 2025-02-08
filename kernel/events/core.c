@@ -178,13 +178,12 @@ static struct srcu_struct pmus_srcu;
  *   2 - disallow kernel profiling for unpriv
  *   3 - disallow all unpriv perf event use
  */
-
-#ifdef CONFIG_GRKERNSEC_PERF_HARDEN
-int sysctl_perf_event_legitimately_concerned __read_only = 3;
-#elif defined(CONFIG_GRKERNSEC_HIDESYM)
-int sysctl_perf_event_legitimately_concerned __read_only = 2;
+#ifdef CONFIG_PERF_EVENTS_USERMODE
+int sysctl_perf_event_paranoid __read_mostly = -1;
+#elif defined CONFIG_SECURITY_PERF_EVENTS_RESTRICT
+int sysctl_perf_event_paranoid __read_mostly = 3;
 #else
-int sysctl_perf_event_legitimately_concerned __read_only = 1;
+int sysctl_perf_event_paranoid __read_mostly = 1;
 #endif
 
 /* Minimum for 512 kiB + 1 user control page */
@@ -211,7 +210,7 @@ static void update_perf_cpu_limits(void)
 
 	tmp *= sysctl_perf_cpu_time_max_percent;
 	do_div(tmp, 100);
-	ACCESS_ONCE_RW(perf_sample_allowed_ns) = tmp;
+	ACCESS_ONCE(perf_sample_allowed_ns) = tmp;
 }
 
 static int perf_rotate_context(struct perf_cpu_context *cpuctx);
@@ -317,7 +316,7 @@ void perf_sample_event_took(u64 sample_len_ns)
 	}
 }
 
-static atomic64_unchecked_t perf_event_id;
+static atomic64_t perf_event_id;
 
 static void cpu_ctx_sched_out(struct perf_cpu_context *cpuctx,
 			      enum event_type_t event_type);
@@ -4007,9 +4006,9 @@ u64 perf_event_read_value(struct perf_event *event, u64 *enabled, u64 *running)
 	total += perf_event_count(event);
 
 	*enabled += event->total_time_enabled +
-			atomic64_read_unchecked(&event->child_total_time_enabled);
+			atomic64_read(&event->child_total_time_enabled);
 	*running += event->total_time_running +
-			atomic64_read_unchecked(&event->child_total_time_running);
+			atomic64_read(&event->child_total_time_running);
 
 	list_for_each_entry(child, &event->child_list, child_list) {
 		(void)perf_event_read(child, false);
@@ -4041,12 +4040,12 @@ static int __perf_read_group_add(struct perf_event *leader,
 	 */
 	if (read_format & PERF_FORMAT_TOTAL_TIME_ENABLED) {
 		values[n++] += leader->total_time_enabled +
-			atomic64_read_unchecked(&leader->child_total_time_enabled);
+			atomic64_read(&leader->child_total_time_enabled);
 	}
 
 	if (read_format & PERF_FORMAT_TOTAL_TIME_RUNNING) {
 		values[n++] += leader->total_time_running +
-			atomic64_read_unchecked(&leader->child_total_time_running);
+			atomic64_read(&leader->child_total_time_running);
 	}
 
 	/*
@@ -4593,10 +4592,10 @@ void perf_event_update_userpage(struct perf_event *event)
 		userpg->offset -= local64_read(&event->hw.prev_count);
 
 	userpg->time_enabled = enabled +
-			atomic64_read_unchecked(&event->child_total_time_enabled);
+			atomic64_read(&event->child_total_time_enabled);
 
 	userpg->time_running = running +
-			atomic64_read_unchecked(&event->child_total_time_running);
+			atomic64_read(&event->child_total_time_running);
 
 	arch_perf_update_userpage(event, userpg, now);
 
@@ -5285,7 +5284,7 @@ perf_output_sample_ustack(struct perf_output_handle *handle, u64 dump_size,
 
 		/* Data. */
 		sp = perf_user_stack_pointer(regs);
-		rem = __output_copy_user(handle, (void __user *) sp, dump_size);
+		rem = __output_copy_user(handle, (void *) sp, dump_size);
 		dyn_size = dump_size - rem;
 
 		perf_output_skip(handle, rem);
@@ -5376,11 +5375,11 @@ static void perf_output_read_one(struct perf_output_handle *handle,
 	values[n++] = perf_event_count(event);
 	if (read_format & PERF_FORMAT_TOTAL_TIME_ENABLED) {
 		values[n++] = enabled +
-			atomic64_read_unchecked(&event->child_total_time_enabled);
+			atomic64_read(&event->child_total_time_enabled);
 	}
 	if (read_format & PERF_FORMAT_TOTAL_TIME_RUNNING) {
 		values[n++] = running +
-			atomic64_read_unchecked(&event->child_total_time_running);
+			atomic64_read(&event->child_total_time_running);
 	}
 	if (read_format & PERF_FORMAT_ID)
 		values[n++] = primary_event_id(event);
@@ -8149,7 +8148,7 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	event->parent		= parent_event;
 
 	event->ns		= get_pid_ns(task_active_pid_ns(current));
-	event->id		= atomic64_inc_return_unchecked(&perf_event_id);
+	event->id		= atomic64_inc_return(&perf_event_id);
 
 	event->state		= PERF_EVENT_STATE_INACTIVE;
 
@@ -8542,10 +8541,8 @@ SYSCALL_DEFINE5(perf_event_open,
 	if (flags & ~PERF_FLAG_ALL)
 		return -EINVAL;
 
-#ifdef CONFIG_GRKERNSEC_PERF_HARDEN
 	if (perf_paranoid_any() && !capable(CAP_SYS_ADMIN))
 		return -EACCES;
-#endif
 
 	err = perf_copy_attr(attr_uptr, &attr);
 	if (err)
@@ -9081,10 +9078,10 @@ static void sync_child_event(struct perf_event *child_event,
 	/*
 	 * Add back the child's count to the parent's count:
 	 */
-	atomic64_add_unchecked(child_val, &parent_event->child_count);
-	atomic64_add_unchecked(child_event->total_time_enabled,
+	atomic64_add(child_val, &parent_event->child_count);
+	atomic64_add(child_event->total_time_enabled,
 		     &parent_event->child_total_time_enabled);
-	atomic64_add_unchecked(child_event->total_time_running,
+	atomic64_add(child_event->total_time_running,
 		     &parent_event->child_total_time_running);
 
 	/*

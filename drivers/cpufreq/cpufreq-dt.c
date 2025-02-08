@@ -371,9 +371,7 @@ static int dt_cpufreq_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	pax_open_kernel();
-	*(void **)&dt_cpufreq_driver.driver_data = dev_get_platdata(&pdev->dev);
-	pax_close_kernel();
+	dt_cpufreq_driver.driver_data = dev_get_platdata(&pdev->dev);
 
 	ret = cpufreq_register_driver(&dt_cpufreq_driver);
 	if (ret)

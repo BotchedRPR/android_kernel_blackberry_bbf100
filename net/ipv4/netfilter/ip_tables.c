@@ -408,12 +408,6 @@ ipt_do_table(struct sk_buff *skb,
 			}
 			if (table_base + v != ipt_next_entry(e) &&
 			    !(e->ip.flags & IPT_F_GOTO)) {
-				/* MODIFIED-BEGIN by tongyuan.lv, 2018-06-07,BUG-6383935*/
-				if (unlikely(stackidx >= private->stacksize)) {
-					verdict = NF_DROP;
-					break;
-				}
-				/* MODIFIED-END by tongyuan.lv,BUG-6383935*/
 				jumpstack[stackidx++] = e;
 				pr_debug("Pushed %p into pos %u\n",
 					 e, stackidx - 1);
@@ -1088,14 +1082,14 @@ static int compat_table_info(const struct xt_table_info *info,
 #endif
 
 static int get_info(struct net *net, void __user *user,
-		    int len, int compat)
+		    const int *len, int compat)
 {
 	char name[XT_TABLE_MAXNAMELEN];
 	struct xt_table *t;
 	int ret;
 
-	if (len != sizeof(struct ipt_getinfo)) {
-		duprintf("length %u != %zu\n", len,
+	if (*len != sizeof(struct ipt_getinfo)) {
+		duprintf("length %u != %zu\n", *len,
 			 sizeof(struct ipt_getinfo));
 		return -EINVAL;
 	}
@@ -1132,7 +1126,7 @@ static int get_info(struct net *net, void __user *user,
 		info.size = private->size;
 		strcpy(info.name, name);
 
-		if (copy_to_user(user, &info, len) != 0)
+		if (copy_to_user(user, &info, *len) != 0)
 			ret = -EFAULT;
 		else
 			ret = 0;
@@ -1167,7 +1161,6 @@ get_entries(struct net *net, struct ipt_get_entries __user *uptr,
 			 *len, sizeof(get) + get.size);
 		return -EINVAL;
 	}
-	get.name[sizeof(get.name) - 1] = '\0';
 
 	t = xt_find_table_lock(net, AF_INET, get.name);
 	if (!IS_ERR_OR_NULL(t)) {
@@ -1796,7 +1789,6 @@ compat_get_entries(struct net *net, struct compat_ipt_get_entries __user *uptr,
 			 *len, sizeof(get) + get.size);
 		return -EINVAL;
 	}
-	get.name[sizeof(get.name) - 1] = '\0';
 
 	xt_compat_lock(AF_INET);
 	t = xt_find_table_lock(net, AF_INET, get.name);
@@ -1835,7 +1827,7 @@ compat_do_ipt_get_ctl(struct sock *sk, int cmd, void __user *user, int *len)
 
 	switch (cmd) {
 	case IPT_SO_GET_INFO:
-		ret = get_info(sock_net(sk), user, *len, 1);
+		ret = get_info(sock_net(sk), user, len, 1);
 		break;
 	case IPT_SO_GET_ENTRIES:
 		ret = compat_get_entries(sock_net(sk), user, len);
@@ -1882,7 +1874,7 @@ do_ipt_get_ctl(struct sock *sk, int cmd, void __user *user, int *len)
 
 	switch (cmd) {
 	case IPT_SO_GET_INFO:
-		ret = get_info(sock_net(sk), user, *len, 0);
+		ret = get_info(sock_net(sk), user, len, 0);
 		break;
 
 	case IPT_SO_GET_ENTRIES:

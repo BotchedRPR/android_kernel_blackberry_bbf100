@@ -555,7 +555,7 @@ static int nf_tables_gettable(struct sock *nlsk, struct sk_buff *skb,
 	int err;
 
 	if (nlh->nlmsg_flags & NLM_F_DUMP) {
-		static struct netlink_dump_control c = {
+		struct netlink_dump_control c = {
 			.dump = nf_tables_dump_tables,
 		};
 		return netlink_dump_start(nlsk, skb, nlh, &c);
@@ -1112,7 +1112,7 @@ static int nf_tables_getchain(struct sock *nlsk, struct sk_buff *skb,
 	int err;
 
 	if (nlh->nlmsg_flags & NLM_F_DUMP) {
-		static struct netlink_dump_control c = {
+		struct netlink_dump_control c = {
 			.dump = nf_tables_dump_chains,
 		};
 		return netlink_dump_start(nlsk, skb, nlh, &c);
@@ -1943,7 +1943,7 @@ static int nf_tables_getrule(struct sock *nlsk, struct sk_buff *skb,
 	int err;
 
 	if (nlh->nlmsg_flags & NLM_F_DUMP) {
-		static struct netlink_dump_control c = {
+		struct netlink_dump_control c = {
 			.dump = nf_tables_dump_rules,
 		};
 		return netlink_dump_start(nlsk, skb, nlh, &c);
@@ -2630,7 +2630,7 @@ static int nf_tables_getset(struct sock *nlsk, struct sk_buff *skb,
 		return err;
 
 	if (nlh->nlmsg_flags & NLM_F_DUMP) {
-		static struct netlink_dump_control c = {
+		struct netlink_dump_control c = {
 			.dump = nf_tables_dump_sets,
 			.done = nf_tables_dump_sets_done,
 		};
@@ -2641,8 +2641,9 @@ static int nf_tables_getset(struct sock *nlsk, struct sk_buff *skb,
 			return -ENOMEM;
 
 		*ctx_dump = ctx;
+		c.data = ctx_dump;
 
-		return __netlink_dump_start(nlsk, skb, nlh, &c, ctx_dump, THIS_MODULE);
+		return netlink_dump_start(nlsk, skb, nlh, &c);
 	}
 
 	/* Only accept unspec with dump */
@@ -3221,7 +3222,7 @@ static int nf_tables_getsetelem(struct sock *nlsk, struct sk_buff *skb,
 		return -ENOENT;
 
 	if (nlh->nlmsg_flags & NLM_F_DUMP) {
-		static struct netlink_dump_control c = {
+		struct netlink_dump_control c = {
 			.dump = nf_tables_dump_set,
 		};
 		return netlink_dump_start(nlsk, skb, nlh, &c);

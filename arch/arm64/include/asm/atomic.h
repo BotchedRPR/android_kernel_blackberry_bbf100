@@ -4,7 +4,6 @@
  * Copyright (C) 1996 Russell King.
  * Copyright (C) 2002 Deep Blue Solutions Ltd.
  * Copyright (C) 2012 ARM Ltd.
- * Copyright (C) 2017 BlackBerry Limited
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -55,16 +54,7 @@
 #define ATOMIC_INIT(i)	{ (i) }
 
 #define atomic_read(v)			READ_ONCE((v)->counter)
-static inline int atomic_read_unchecked(const atomic_unchecked_t *v)
-{
-       return *(const volatile int *)&v->counter;
-}
-
 #define atomic_set(v, i)		WRITE_ONCE(((v)->counter), (i))
-static inline void atomic_set_unchecked(atomic_unchecked_t *v, int i)
-{
-       v->counter = i;
-}
 
 #define atomic_add_return_relaxed	atomic_add_return_relaxed
 #define atomic_add_return_acquire	atomic_add_return_acquire
@@ -72,18 +62,9 @@ static inline void atomic_set_unchecked(atomic_unchecked_t *v, int i)
 #define atomic_add_return		atomic_add_return
 
 #define atomic_inc_return_relaxed(v)	atomic_add_return_relaxed(1, (v))
-static inline int atomic_inc_return_unchecked_relaxed(atomic_unchecked_t *v)
-{
-        return atomic_add_return_unchecked(1, v);
-}
-
 #define atomic_inc_return_acquire(v)	atomic_add_return_acquire(1, (v))
 #define atomic_inc_return_release(v)	atomic_add_return_release(1, (v))
 #define atomic_inc_return(v)		atomic_add_return(1, (v))
-static inline int atomic_inc_return_unchecked(atomic_unchecked_t *v)
-{
-        return atomic_add_return_unchecked(1, v);
-}
 
 #define atomic_sub_return_relaxed	atomic_sub_return_relaxed
 #define atomic_sub_return_acquire	atomic_sub_return_acquire
@@ -99,10 +80,6 @@ static inline int atomic_inc_return_unchecked(atomic_unchecked_t *v)
 #define atomic_xchg_acquire(v, new)	xchg_acquire(&((v)->counter), (new))
 #define atomic_xchg_release(v, new)	xchg_release(&((v)->counter), (new))
 #define atomic_xchg(v, new)		xchg(&((v)->counter), (new))
-static inline int atomic_xchg_unchecked(atomic_unchecked_t *v, int new)
-{
-        return xchg(&v->counter, new);
-}
 
 #define atomic_cmpxchg_relaxed(v, old, new)				\
 	cmpxchg_relaxed(&((v)->counter), (old), (new))
@@ -113,23 +90,8 @@ static inline int atomic_xchg_unchecked(atomic_unchecked_t *v, int new)
 #define atomic_cmpxchg(v, old, new)	cmpxchg(&((v)->counter), (old), (new))
 
 #define atomic_inc(v)			atomic_add(1, (v))
-static inline void atomic_inc_unchecked(atomic_unchecked_t *v)
-{
-        atomic_add_unchecked(1, v);
-}
-
 #define atomic_dec(v)			atomic_sub(1, (v))
-static inline void atomic_dec_unchecked(atomic_unchecked_t *v)
-{
-        atomic_sub_unchecked(1, v);
-}
-
 #define atomic_inc_and_test(v)		(atomic_inc_return(v) == 0)
-static inline int atomic_inc_and_test_unchecked(atomic_unchecked_t *v)
-{
-        return atomic_add_return_unchecked(1, v) == 0;
-}
-
 #define atomic_dec_and_test(v)		(atomic_dec_return(v) == 0)
 #define atomic_sub_and_test(i, v)	(atomic_sub_return((i), (v)) == 0)
 #define atomic_add_negative(i, v)	(atomic_add_return((i), (v)) < 0)
@@ -141,16 +103,7 @@ static inline int atomic_inc_and_test_unchecked(atomic_unchecked_t *v)
  */
 #define ATOMIC64_INIT			ATOMIC_INIT
 #define atomic64_read			atomic_read
-static inline int atomic64_read_unchecked(const atomic64_unchecked_t *v)
-{
-        return *(const volatile long *)&v->counter;
-}
-
 #define atomic64_set			atomic_set
-static inline void atomic64_set_unchecked(atomic64_unchecked_t *v, long i)
-{
-        v->counter = i;
-}
 
 #define atomic64_add_return_relaxed	atomic64_add_return_relaxed
 #define atomic64_add_return_acquire	atomic64_add_return_acquire
@@ -161,18 +114,8 @@ static inline void atomic64_set_unchecked(atomic64_unchecked_t *v, long i)
 #define atomic64_inc_return_acquire(v)	atomic64_add_return_acquire(1, (v))
 #define atomic64_inc_return_release(v)	atomic64_add_return_release(1, (v))
 #define atomic64_inc_return(v)		atomic64_add_return(1, (v))
-static inline int atomic64_inc_return_unchecked(atomic64_unchecked_t *v)
-{
-        return atomic64_add_return_unchecked(1, v);
-}
 
 #define atomic64_sub_return_relaxed	atomic64_sub_return_relaxed
-
-static inline int atomic64_inc_return_unchecked_relaxed(atomic64_unchecked_t *v)
-{
-        return atomic64_add_return_unchecked(1, v);
-}
-
 #define atomic64_sub_return_acquire	atomic64_sub_return_acquire
 #define atomic64_sub_return_release	atomic64_sub_return_release
 #define atomic64_sub_return		atomic64_sub_return
@@ -181,19 +124,11 @@ static inline int atomic64_inc_return_unchecked_relaxed(atomic64_unchecked_t *v)
 #define atomic64_dec_return_acquire(v)	atomic64_sub_return_acquire(1, (v))
 #define atomic64_dec_return_release(v)	atomic64_sub_return_release(1, (v))
 #define atomic64_dec_return(v)		atomic64_sub_return(1, (v))
-static inline void atomic64_dec_return_unchecked(atomic64_unchecked_t *v)
-{
-        atomic64_sub_unchecked(1, v);
-}
 
 #define atomic64_xchg_relaxed		atomic_xchg_relaxed
 #define atomic64_xchg_acquire		atomic_xchg_acquire
 #define atomic64_xchg_release		atomic_xchg_release
 #define atomic64_xchg			atomic_xchg
-static inline int atomic64_xchg_unchecked(atomic64_unchecked_t *v, long new)
-{
-        return xchg(&v->counter, new);
-}
 
 #define atomic64_cmpxchg_relaxed	atomic_cmpxchg_relaxed
 #define atomic64_cmpxchg_acquire	atomic_cmpxchg_acquire
@@ -201,22 +136,8 @@ static inline int atomic64_xchg_unchecked(atomic64_unchecked_t *v, long new)
 #define atomic64_cmpxchg		atomic_cmpxchg
 
 #define atomic64_inc(v)			atomic64_add(1, (v))
-static inline void atomic64_inc_unchecked(atomic64_unchecked_t *v)
-{
-        atomic64_add_unchecked(1, v);
-}
-
 #define atomic64_dec(v)			atomic64_sub(1, (v))
-static inline void atomic64_dec_unchecked(atomic64_unchecked_t *v)
-{
-        atomic64_sub_unchecked(1, v);
-}
-
 #define atomic64_inc_and_test(v)	(atomic64_inc_return(v) == 0)
-static inline int atomic64_inc_and_test_unchecked(atomic64_unchecked_t *v)
-{
-        return atomic64_add_return_unchecked(1, v) == 0;
-}
 #define atomic64_dec_and_test(v)	(atomic64_dec_return(v) == 0)
 #define atomic64_sub_and_test(i, v)	(atomic64_sub_return((i), (v)) == 0)
 #define atomic64_add_negative(i, v)	(atomic64_add_return((i), (v)) < 0)

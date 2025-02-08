@@ -485,9 +485,7 @@ static int m48t59_rtc_probe(struct platform_device *pdev)
 	if (IS_ERR(m48t59->rtc))
 		return PTR_ERR(m48t59->rtc);
 
-	pax_open_kernel();
-	*(size_t *)&m48t59_nvram_attr.size = pdata->offset;
-	pax_close_kernel();
+	m48t59_nvram_attr.size = pdata->offset;
 
 	ret = sysfs_create_bin_file(&pdev->dev.kobj, &m48t59_nvram_attr);
 	if (ret)

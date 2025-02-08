@@ -152,7 +152,7 @@ int ax25_register_dev_sysctl(ax25_dev *ax25_dev)
 {
 	char path[sizeof("net/ax25/") + IFNAMSIZ];
 	int k;
-	ctl_table_no_const *table;
+	struct ctl_table *table;
 
 	table = kmemdup(ax25_param_table, sizeof(ax25_param_table), GFP_KERNEL);
 	if (!table)

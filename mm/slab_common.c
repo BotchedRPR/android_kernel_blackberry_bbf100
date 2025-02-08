@@ -25,34 +25,10 @@
 
 #include "slab.h"
 
-enum slab_state slab_state __read_only;
+enum slab_state slab_state;
 LIST_HEAD(slab_caches);
 DEFINE_MUTEX(slab_mutex);
 struct kmem_cache *kmem_cache;
-
-#ifdef CONFIG_PAX_MEMORY_SANITIZE
-enum pax_sanitize_mode pax_sanitize_slab __read_only = PAX_SANITIZE_SLAB_FAST;
-static int __init pax_sanitize_slab_setup(char *str)
-{
-	if (!str)
-		return 0;
-
-	if (!strcmp(str, "0") || !strcmp(str, "off")) {
-		pr_info("PaX slab sanitization: %s\n", "disabled");
-		pax_sanitize_slab = PAX_SANITIZE_SLAB_OFF;
-	} else if (!strcmp(str, "1") || !strcmp(str, "fast")) {
-		pr_info("PaX slab sanitization: %s\n", "fast");
-		pax_sanitize_slab = PAX_SANITIZE_SLAB_FAST;
-	} else if (!strcmp(str, "full")) {
-		pr_info("PaX slab sanitization: %s\n", "full");
-		pax_sanitize_slab = PAX_SANITIZE_SLAB_FULL;
-	} else
-		pr_err("PaX slab sanitization: unsupported option '%s'\n", str);
-
-	return 0;
-}
-early_param("pax_sanitize_slab", pax_sanitize_slab_setup);
-#endif
 
 /*
  * Set of flags that will prevent slab merging
@@ -67,7 +43,7 @@ early_param("pax_sanitize_slab", pax_sanitize_slab_setup);
  * Merge control. If this is set then no merging of slab caches will occur.
  * (Could be removed. This was introduced to pacify the merge skeptics.)
  */
-static int slab_nomerge = 1;
+static int slab_nomerge;
 
 static int __init setup_slab_nomerge(char *str)
 {
@@ -263,7 +239,7 @@ int slab_unmergeable(struct kmem_cache *s)
 	/*
 	 * We may have set a slab to be unmergeable during bootstrap.
 	 */
-	if (atomic_read(&s->refcount) < 0)
+	if (s->refcount < 0)
 		return 1;
 
 	return 0;
@@ -367,7 +343,7 @@ static struct kmem_cache *create_cache(const char *name,
 	if (err)
 		goto out_free_cache;
 
-	atomic_set(&s->refcount, 1);
+	s->refcount = 1;
 	list_add(&s->list, &slab_caches);
 out:
 	if (err)
@@ -431,13 +407,6 @@ kmem_cache_create(const char *name, size_t size, size_t align,
 	 */
 	flags &= CACHE_CREATE_MASK;
 
-#ifdef CONFIG_PAX_MEMORY_SANITIZE
-	if (pax_sanitize_slab == PAX_SANITIZE_SLAB_OFF || (flags & SLAB_DESTROY_BY_RCU))
-		flags |= SLAB_NO_SANITIZE;
-	else if (pax_sanitize_slab == PAX_SANITIZE_SLAB_FULL)
-		flags &= ~SLAB_NO_SANITIZE;
-#endif
-
 	s = __kmem_cache_alias(name, size, align, flags, ctor);
 	if (s)
 		goto out_unlock;
@@ -499,7 +468,7 @@ static void release_caches(struct list_head *release, bool need_rcu_barrier)
 		rcu_barrier();
 
 	list_for_each_entry_safe(s, s2, release, list) {
-#if defined(SLAB_SUPPORTS_SYSFS) && !defined(CONFIG_GRKERNSEC_PROC_ADD)
+#ifdef SLAB_SUPPORTS_SYSFS
 		sysfs_slab_remove(s);
 #else
 		slab_kmem_cache_release(s);
@@ -742,7 +711,8 @@ void kmem_cache_destroy(struct kmem_cache *s)
 
 	mutex_lock(&slab_mutex);
 
-	if (!atomic_dec_and_test(&s->refcount))
+	s->refcount--;
+	if (s->refcount)
 		goto out_unlock;
 
 	err = shutdown_memcg_caches(s, &release, &need_rcu_barrier);
@@ -808,7 +778,7 @@ void __init create_boot_cache(struct kmem_cache *s, const char *name, size_t siz
 		panic("Creation of kmalloc slab %s size=%zu failed. Reason %d\n",
 					name, size, err);
 
-	atomic_set(&s->refcount, -1);	/* Exempt from merging for now */
+	s->refcount = -1;	/* Exempt from merging for now */
 }
 
 struct kmem_cache *__init create_kmalloc_cache(const char *name, size_t size,
@@ -821,7 +791,7 @@ struct kmem_cache *__init create_kmalloc_cache(const char *name, size_t size,
 
 	create_boot_cache(s, name, size, flags);
 	list_add(&s->list, &slab_caches);
-	atomic_set(&s->refcount, 1);
+	s->refcount = 1;
 	return s;
 }
 
@@ -831,11 +801,6 @@ EXPORT_SYMBOL(kmalloc_caches);
 #ifdef CONFIG_ZONE_DMA
 struct kmem_cache *kmalloc_dma_caches[KMALLOC_SHIFT_HIGH + 1];
 EXPORT_SYMBOL(kmalloc_dma_caches);
-#endif
-
-#ifdef CONFIG_PAX_USERCOPY_SLABS
-struct kmem_cache *kmalloc_usercopy_caches[KMALLOC_SHIFT_HIGH + 1];
-EXPORT_SYMBOL(kmalloc_usercopy_caches);
 #endif
 
 /*
@@ -902,13 +867,6 @@ struct kmem_cache *kmalloc_slab(size_t size, gfp_t flags)
 		return kmalloc_dma_caches[index];
 
 #endif
-
-#ifdef CONFIG_PAX_USERCOPY_SLABS
-	if (unlikely((flags & GFP_USERCOPY)))
-		return kmalloc_usercopy_caches[index];
-
-#endif
-
 	return kmalloc_caches[index];
 }
 
@@ -1001,7 +959,7 @@ void __init create_kmalloc_caches(unsigned long flags)
 
 	for (i = KMALLOC_SHIFT_LOW; i <= KMALLOC_SHIFT_HIGH; i++) {
 		if (!kmalloc_caches[i])
-			new_kmalloc_cache(i, SLAB_USERCOPY | flags);
+			new_kmalloc_cache(i, flags);
 
 		/*
 		 * Caches that are not of the two-to-the-power-of size.
@@ -1009,9 +967,9 @@ void __init create_kmalloc_caches(unsigned long flags)
 		 * earlier power of two caches
 		 */
 		if (KMALLOC_MIN_SIZE <= 32 && !kmalloc_caches[1] && i == 6)
-			new_kmalloc_cache(1, SLAB_USERCOPY | flags);
+			new_kmalloc_cache(1, flags);
 		if (KMALLOC_MIN_SIZE <= 64 && !kmalloc_caches[2] && i == 7)
-			new_kmalloc_cache(2, SLAB_USERCOPY | flags);
+			new_kmalloc_cache(2, flags);
 	}
 
 	/* Kmalloc array is now usable */
@@ -1032,23 +990,6 @@ void __init create_kmalloc_caches(unsigned long flags)
 		}
 	}
 #endif
-
-#ifdef CONFIG_PAX_USERCOPY_SLABS
-	for (i = 0; i <= KMALLOC_SHIFT_HIGH; i++) {
-		struct kmem_cache *s = kmalloc_caches[i];
-
-		if (s) {
-			int size = kmalloc_size(i);
-			char *n = kasprintf(GFP_NOWAIT,
-				 "usercopy-kmalloc-%d", size);
-
-			BUG_ON(!n);
-			kmalloc_usercopy_caches[i] = create_kmalloc_cache(n,
-				size, SLAB_USERCOPY | flags);
-		}
-	}
-#endif
-
 }
 #endif /* !CONFIG_SLOB */
 
@@ -1108,9 +1049,6 @@ static void print_slabinfo_header(struct seq_file *m)
 	seq_puts(m, " : globalstat <listallocs> <maxobjs> <grown> <reaped> "
 		 "<error> <maxfreeable> <nodeallocs> <remotefrees> <alienoverflow>");
 	seq_puts(m, " : cpustat <allochit> <allocmiss> <freehit> <freemiss>");
-#ifdef CONFIG_PAX_MEMORY_SANITIZE
-	seq_puts(m, " : pax <sanitized> <not_sanitized>");
-#endif
 #endif
 	seq_putc(m, '\n');
 }
@@ -1240,7 +1178,7 @@ static int __init slab_proc_init(void)
 module_init(slab_proc_init);
 #endif /* CONFIG_SLABINFO */
 
-static __always_inline void * __size_overflow(2) __do_krealloc(const void *p, size_t new_size,
+static __always_inline void *__do_krealloc(const void *p, size_t new_size,
 					   gfp_t flags)
 {
 	void *ret;

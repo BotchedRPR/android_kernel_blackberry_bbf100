@@ -105,8 +105,6 @@
 #include <linux/kmod.h>
 #include <linux/nsproxy.h>
 
-#include <linux/grsecurity.h>
-
 #undef TTY_DEBUG_HANGUP
 #ifdef TTY_DEBUG_HANGUP
 # define tty_debug_hangup(tty, f, args...)	tty_debug(tty, f, ##args)
@@ -2282,8 +2280,6 @@ static int tiocsti(struct tty_struct *tty, char __user *p)
 	char ch, mbz = 0;
 	struct tty_ldisc *ld;
 
-	if (gr_handle_tiocsti(tty))
-		return -EPERM;
 	if ((current->signal->tty != tty) && !capable(CAP_SYS_ADMIN))
 		return -EPERM;
 	if (get_user(ch, p))
@@ -3569,7 +3565,7 @@ EXPORT_SYMBOL(tty_devnum);
 
 void tty_default_fops(struct file_operations *fops)
 {
-	memcpy((void *)fops, &tty_fops, sizeof(tty_fops));
+	*fops = tty_fops;
 }
 
 /*

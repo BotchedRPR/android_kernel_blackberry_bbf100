@@ -23,7 +23,6 @@
 
 #include <linux/rwsem.h>
 #include <linux/interrupt.h>
-#include <scsi/scsi_host.h>
 
 #define MAX_TOPO_LEVEL		6
 

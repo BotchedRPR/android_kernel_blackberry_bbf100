@@ -356,14 +356,16 @@ static struct attribute_group power_supply_attr_group = {
 	.is_visible = power_supply_attr_is_visible,
 };
 
-const struct attribute_group *power_supply_attr_groups[] = {
+static const struct attribute_group *power_supply_attr_groups[] = {
 	&power_supply_attr_group,
 	NULL,
 };
 
-void power_supply_init_attrs(void)
+void power_supply_init_attrs(struct device_type *dev_type)
 {
 	int i;
+
+	dev_type->groups = power_supply_attr_groups;
 
 	for (i = 0; i < ARRAY_SIZE(power_supply_attrs); i++)
 		__power_supply_attrs[i] = &power_supply_attrs[i].attr;

@@ -1071,6 +1071,8 @@ static int keyring_detect_cycle(struct key *A, struct key *B)
 int __key_link_begin(struct key *keyring,
 		     const struct keyring_index_key *index_key,
 		     struct assoc_array_edit **_edit)
+	__acquires(&keyring->sem)
+	__acquires(&keyring_serialise_link_sem)
 {
 	struct assoc_array_edit *edit;
 	int ret;
@@ -1170,6 +1172,8 @@ void __key_link(struct key *key, struct assoc_array_edit **_edit)
 void __key_link_end(struct key *keyring,
 		    const struct keyring_index_key *index_key,
 		    struct assoc_array_edit *edit)
+	__releases(&keyring->sem)
+	__releases(&keyring_serialise_link_sem)
 {
 	BUG_ON(index_key->type == NULL);
 	kenter("%d,%s,", keyring->serial, index_key->type->name);

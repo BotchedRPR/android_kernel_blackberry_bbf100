@@ -63,7 +63,7 @@ static int set_copy_dsdt(const struct dmi_system_id *id)
 }
 #endif
 
-static const struct dmi_system_id dsdt_dmi_table[] __initconst = {
+static struct dmi_system_id dsdt_dmi_table[] __initdata = {
 	/*
 	 * Invoke DSDT corruption work-around on all Toshiba Satellite.
 	 * https://bugzilla.kernel.org/show_bug.cgi?id=14679
@@ -79,7 +79,7 @@ static const struct dmi_system_id dsdt_dmi_table[] __initconst = {
 	{}
 };
 #else
-static const struct dmi_system_id dsdt_dmi_table[] __initconst = {
+static struct dmi_system_id dsdt_dmi_table[] __initdata = {
 	{}
 };
 #endif

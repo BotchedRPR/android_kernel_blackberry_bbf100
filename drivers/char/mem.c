@@ -18,7 +18,6 @@
 #include <linux/raw.h>
 #include <linux/tty.h>
 #include <linux/capability.h>
-#include <linux/security.h>
 #include <linux/ptrace.h>
 #include <linux/device.h>
 #include <linux/highmem.h>
@@ -36,10 +35,6 @@
 #endif
 
 #define DEVPORT_MINOR	4
-
-#if defined(CONFIG_GRKERNSEC) && !defined(CONFIG_GRKERNSEC_NO_RBAC)
-extern const struct file_operations grsec_fops;
-#endif
 
 static inline unsigned long size_inside_page(unsigned long start,
 					     unsigned long size)
@@ -76,24 +71,15 @@ static inline int range_is_allowed(unsigned long pfn, unsigned long size)
 
 	while (cursor < to) {
 		if (!devmem_is_allowed(pfn)) {
-#ifdef CONFIG_GRKERNSEC_KMEM
-			gr_handle_mem_readwrite(from, to);
-#else
 			printk(KERN_INFO
 		"Program %s tried to access /dev/mem between %Lx->%Lx.\n",
 				current->comm, from, to);
-#endif
 			return 0;
 		}
 		cursor += PAGE_SIZE;
 		pfn++;
 	}
 	return 1;
-}
-#elif defined(CONFIG_GRKERNSEC_KMEM)
-static inline int range_is_allowed(unsigned long pfn, unsigned long size)
-{
-	return 0;
 }
 #else
 static inline int page_is_allowed(unsigned long pfn)
@@ -146,9 +132,8 @@ static ssize_t read_mem(struct file *file, char __user *buf,
 #endif
 
 	while (count > 0) {
-		unsigned long remaining = 0;
+		unsigned long remaining;
 		int allowed;
-		char *temp;
 
 		sz = size_inside_page(p, count);
 
@@ -168,23 +153,7 @@ static ssize_t read_mem(struct file *file, char __user *buf,
 			if (!ptr)
 				return -EFAULT;
 
-#ifdef CONFIG_PAX_USERCOPY
-			temp = kmalloc(sz, GFP_KERNEL|GFP_USERCOPY);
-			if (!temp) {
-				unxlate_dev_mem_ptr(p, ptr);
-				return -ENOMEM;
-			}
-			remaining = probe_kernel_read(temp, ptr, sz);
-#else
-			temp = ptr;
-#endif
-
-			if (!remaining)
-				remaining = copy_to_user(buf, temp, sz);
-
-#ifdef CONFIG_PAX_USERCOPY
-			kfree(temp);
-#endif
+			remaining = copy_to_user(buf, ptr, sz);
 
 			unxlate_dev_mem_ptr(p, ptr);
 		}
@@ -438,8 +407,9 @@ static ssize_t read_kmem(struct file *file, char __user *buf,
 			 size_t count, loff_t *ppos)
 {
 	unsigned long p = *ppos;
-	ssize_t low_count, read, sz, err = 0;
+	ssize_t low_count, read, sz;
 	char *kbuf; /* k-addr because vread() takes vmlist_lock rwlock */
+	int err = 0;
 
 	read = 0;
 	if (p < (unsigned long) high_memory) {
@@ -461,8 +431,6 @@ static ssize_t read_kmem(struct file *file, char __user *buf,
 		}
 #endif
 		while (low_count > 0) {
-			char *temp;
-
 			sz = size_inside_page(p, low_count);
 
 			/*
@@ -472,23 +440,7 @@ static ssize_t read_kmem(struct file *file, char __user *buf,
 			 */
 			kbuf = xlate_dev_kmem_ptr((void *)p);
 
-#ifdef CONFIG_PAX_USERCOPY
-			temp = kmalloc(sz, GFP_KERNEL|GFP_USERCOPY);
-			if (!temp)
-				return -ENOMEM;
-			err = probe_kernel_read(temp, kbuf, sz);
-#else
-			temp = kbuf;
-#endif
-
-			if (!err)
-				err = copy_to_user(buf, temp, sz);
-
-#ifdef CONFIG_PAX_USERCOPY
-			kfree(temp);
-#endif
-
-			if (err)
+			if (copy_to_user(buf, kbuf, sz))
 				return -EFAULT;
 			buf += sz;
 			p += sz;
@@ -877,9 +829,6 @@ static const struct memdev {
 #ifdef CONFIG_PRINTK
 	[11] = { "kmsg", 0644, &kmsg_fops, 0 },
 #endif
-#if defined(CONFIG_GRKERNSEC) && !defined(CONFIG_GRKERNSEC_NO_RBAC)
-	[13] = { "grsec",S_IRUSR | S_IWUGO, &grsec_fops, 0 },
-#endif
 };
 
 static int memory_open(struct inode *inode, struct file *filp)
@@ -941,7 +890,7 @@ static int __init chr_dev_init(void)
 			continue;
 
 		device_create(mem_class, NULL, MKDEV(MEM_MAJOR, minor),
-			      NULL, "%s", devlist[minor].name);
+			      NULL, devlist[minor].name);
 	}
 
 	return tty_init();

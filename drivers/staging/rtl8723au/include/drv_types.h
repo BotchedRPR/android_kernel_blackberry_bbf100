@@ -185,7 +185,7 @@ struct dvobj_priv {
 
 	struct usb_interface *pusbintf;
 	struct usb_device *pusbdev;
-	atomic_unchecked_t continual_urb_error;
+	atomic_t continual_urb_error;
 
 /*-------- below is for PCIE INTERFACE --------*/
 

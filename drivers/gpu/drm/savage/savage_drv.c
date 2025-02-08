@@ -76,10 +76,7 @@ static struct pci_driver savage_pci_driver = {
 
 static int __init savage_init(void)
 {
-	pax_open_kernel();
-	*(int *)&driver.num_ioctls = savage_max_ioctl;
-	pax_close_kernel();
-
+	driver.num_ioctls = savage_max_ioctl;
 	return drm_pci_init(&driver, &savage_pci_driver);
 }
 

@@ -452,9 +452,7 @@ static int __init ibm_acpiphp_init(void)
 		goto init_cleanup;
 	}
 
-	pax_open_kernel();
-	*(size_t *)&ibm_apci_table_attr.size = ibm_get_table_from_acpi(NULL);
-	pax_close_kernel();
+	ibm_apci_table_attr.size = ibm_get_table_from_acpi(NULL);
 	retval = sysfs_create_bin_file(sysdir, &ibm_apci_table_attr);
 
 	return retval;

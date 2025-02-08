@@ -470,9 +470,7 @@ test_steal_space_from_bitmap_to_extent(struct btrfs_block_group_cache *cache)
 	 * extent entry.
 	 */
 	use_bitmap_op = cache->free_space_ctl->op->use_bitmap;
-	pax_open_kernel();
-	*(void **)&cache->free_space_ctl->op->use_bitmap = test_use_bitmap;
-	pax_close_kernel();
+	cache->free_space_ctl->op->use_bitmap = test_use_bitmap;
 
 	/*
 	 * Extent entry covering free space range [128Mb - 256Kb, 128Mb - 128Kb[
@@ -879,9 +877,7 @@ test_steal_space_from_bitmap_to_extent(struct btrfs_block_group_cache *cache)
 	if (ret)
 		return ret;
 
-	pax_open_kernel();
-	*(void **)&cache->free_space_ctl->op->use_bitmap = use_bitmap_op;
-	pax_close_kernel();
+	cache->free_space_ctl->op->use_bitmap = use_bitmap_op;
 	__btrfs_remove_free_space_cache(cache->free_space_ctl);
 
 	return 0;

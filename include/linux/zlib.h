@@ -31,7 +31,6 @@
 #define _ZLIB_H
 
 #include <linux/zconf.h>
-#include <linux/compiler.h>
 
 /* zlib deflate based on ZLIB_VERSION "1.1.3" */
 /* zlib inflate based on ZLIB_VERSION "1.2.3" */
@@ -180,7 +179,7 @@ typedef z_stream *z_streamp;
 
                         /* basic functions */
 
-extern int zlib_deflate_workspacesize (int windowBits, int memLevel) __intentional_overflow(0);
+extern int zlib_deflate_workspacesize (int windowBits, int memLevel);
 /*
    Returns the number of bytes that needs to be allocated for a per-
    stream workspace with the specified parameters.  A pointer to this

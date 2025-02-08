@@ -31,9 +31,6 @@ struct mnt_namespace;
 
 #define MNT_SHRINKABLE	0x100
 #define MNT_WRITE_HOLD	0x200
-#ifdef CONFIG_BBSECURE_PATHTRUST
-#define MNT_TRUSTED	0x400 /* Mount on trusted device */
-#endif /* CONFIG_BBSECURE_PATHTRUST */
 
 #define MNT_SHARED	0x1000	/* if the vfsmount is a shared mount */
 #define MNT_UNBINDABLE	0x2000	/* if the vfsmount is a unbindable mount */
@@ -71,7 +68,7 @@ struct vfsmount {
 	struct super_block *mnt_sb;	/* pointer to superblock */
 	int mnt_flags;
 	void *data;
-} __randomize_layout;
+};
 
 struct file; /* forward dec */
 struct path;

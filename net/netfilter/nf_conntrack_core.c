@@ -66,21 +66,6 @@ EXPORT_SYMBOL_GPL(nf_conntrack_locks);
 __cacheline_aligned_in_smp DEFINE_SPINLOCK(nf_conntrack_expect_lock);
 EXPORT_SYMBOL_GPL(nf_conntrack_expect_lock);
 
-static __read_mostly spinlock_t nf_conntrack_locks_all_lock;
-static __read_mostly bool nf_conntrack_locks_all;
-
-void nf_conntrack_lock(spinlock_t *lock) __acquires(lock)
-{
-	spin_lock(lock);
-	while (unlikely(nf_conntrack_locks_all)) {
-		spin_unlock(lock);
-		spin_lock(&nf_conntrack_locks_all_lock);
-		spin_unlock(&nf_conntrack_locks_all_lock);
-		spin_lock(lock);
-	}
-}
-EXPORT_SYMBOL_GPL(nf_conntrack_lock);
-
 static void nf_conntrack_double_unlock(unsigned int h1, unsigned int h2)
 {
 	h1 %= CONNTRACK_LOCKS;
@@ -97,12 +82,12 @@ static bool nf_conntrack_double_lock(struct net *net, unsigned int h1,
 	h1 %= CONNTRACK_LOCKS;
 	h2 %= CONNTRACK_LOCKS;
 	if (h1 <= h2) {
-		nf_conntrack_lock(&nf_conntrack_locks[h1]);
+		spin_lock(&nf_conntrack_locks[h1]);
 		if (h1 != h2)
 			spin_lock_nested(&nf_conntrack_locks[h2],
 					 SINGLE_DEPTH_NESTING);
 	} else {
-		nf_conntrack_lock(&nf_conntrack_locks[h2]);
+		spin_lock(&nf_conntrack_locks[h2]);
 		spin_lock_nested(&nf_conntrack_locks[h1],
 				 SINGLE_DEPTH_NESTING);
 	}
@@ -117,19 +102,16 @@ static void nf_conntrack_all_lock(void)
 {
 	int i;
 
-	spin_lock(&nf_conntrack_locks_all_lock);
-	nf_conntrack_locks_all = true;
-
-	for (i = 0; i < CONNTRACK_LOCKS; i++) {
-		spin_lock(&nf_conntrack_locks[i]);
-		spin_unlock(&nf_conntrack_locks[i]);
-	}
+	for (i = 0; i < CONNTRACK_LOCKS; i++)
+		spin_lock_nested(&nf_conntrack_locks[i], i);
 }
 
 static void nf_conntrack_all_unlock(void)
 {
-	nf_conntrack_locks_all = false;
-	spin_unlock(&nf_conntrack_locks_all_lock);
+	int i;
+
+	for (i = 0; i < CONNTRACK_LOCKS; i++)
+		spin_unlock(&nf_conntrack_locks[i]);
 }
 
 unsigned int nf_conntrack_htable_size __read_mostly;
@@ -775,7 +757,7 @@ restart:
 	hash = hash_bucket(_hash, net);
 	for (; i < net->ct.htable_size; i++) {
 		lockp = &nf_conntrack_locks[hash % CONNTRACK_LOCKS];
-		nf_conntrack_lock(lockp);
+		spin_lock(lockp);
 		if (read_seqcount_retry(&net->ct.generation, sequence)) {
 			spin_unlock(lockp);
 			goto restart;
@@ -1400,7 +1382,7 @@ get_next_corpse(struct net *net, int (*iter)(struct nf_conn *i, void *data),
 	for (; *bucket < net->ct.htable_size; (*bucket)++) {
 		lockp = &nf_conntrack_locks[*bucket % CONNTRACK_LOCKS];
 		local_bh_disable();
-		nf_conntrack_lock(lockp);
+		spin_lock(lockp);
 		if (*bucket < net->ct.htable_size) {
 			hlist_nulls_for_each_entry(h, n, &net->ct.hash[*bucket], hnnode) {
 				if (NF_CT_DIRECTION(h) != IP_CT_DIR_ORIGINAL)
@@ -1773,13 +1755,9 @@ void nf_conntrack_init_end(void)
 #define DYING_NULLS_VAL		((1<<30)+1)
 #define TEMPLATE_NULLS_VAL	((1<<30)+2)
 
-#ifdef CONFIG_GRKERNSEC_HIDESYM
-static atomic_unchecked_t conntrack_cache_id = ATOMIC_INIT(0);
-#endif
-
 int nf_conntrack_init_net(struct net *net)
 {
-	//static atomic64_t unique_id;
+	static atomic64_t unique_id;
 	int ret = -ENOMEM;
 	int cpu;
 
@@ -1802,11 +1780,8 @@ int nf_conntrack_init_net(struct net *net)
 	if (!net->ct.stat)
 		goto err_pcpu_lists;
 
-#ifdef CONFIG_GRKERNSEC_HIDESYM
-	net->ct.slabname = kasprintf(GFP_KERNEL, "nf_conntrack_%08x", atomic_inc_return_unchecked(&conntrack_cache_id));
-#else
- 	net->ct.slabname = kasprintf(GFP_KERNEL, "nf_conntrack_%p", net);
-#endif
+	net->ct.slabname = kasprintf(GFP_KERNEL, "nf_conntrack_%llu",
+				(u64)atomic64_inc_return(&unique_id));
 	if (!net->ct.slabname)
 		goto err_slabname;
 

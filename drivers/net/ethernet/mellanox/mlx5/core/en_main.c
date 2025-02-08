@@ -2038,11 +2038,8 @@ static void mlx5e_build_netdev(struct net_device *netdev)
 
 	SET_NETDEV_DEV(netdev, &mdev->pdev->dev);
 
-	if (priv->params.num_tc > 1) {
-		pax_open_kernel();
-		*(void **)&mlx5e_netdev_ops.ndo_select_queue = mlx5e_select_queue;
-		pax_close_kernel();
-	}
+	if (priv->params.num_tc > 1)
+		mlx5e_netdev_ops.ndo_select_queue = mlx5e_select_queue;
 
 	netdev->netdev_ops        = &mlx5e_netdev_ops;
 	netdev->watchdog_timeo    = 15 * HZ;
