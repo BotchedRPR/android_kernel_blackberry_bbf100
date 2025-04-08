@@ -1362,14 +1362,12 @@ emsgsize:
 	 */
 
 	cork->length += length;
-	/* MODIFIED-BEGIN by tongyuan.lv, 2018-06-07,BUG-6383935*/
 	if ((skb && skb_is_gso(skb)) ||
 	    (((length + (skb ? skb->len : headersize)) > mtu) &&
 	    (skb_queue_len(queue) <= 1) &&
 	    (sk->sk_protocol == IPPROTO_UDP) &&
-	    (rt->dst.dev->features & NETIF_F_UFO) &&
+	    (rt->dst.dev->features & NETIF_F_UFO) && !dst_xfrm(&rt->dst) &&
 	    (sk->sk_type == SOCK_DGRAM) && !udp_get_no_check6_tx(sk))) {
-	    /* MODIFIED-END by tongyuan.lv,BUG-6383935*/
 		err = ip6_ufo_append_data(sk, queue, getfrag, from, length,
 					  hh_len, fragheaderlen, exthdrlen,
 					  transhdrlen, mtu, flags, fl6);
