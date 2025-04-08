@@ -1386,19 +1386,19 @@ struct ext4_sb_info {
 	unsigned long s_mb_last_start;
 
 	/* stats for buddy allocator */
-	atomic_t s_bal_reqs;	/* number of reqs with len > 1 */
-	atomic_t s_bal_success;	/* we found long enough chunks */
-	atomic_t s_bal_allocated;	/* in blocks */
-	atomic_t s_bal_ex_scanned;	/* total extents scanned */
-	atomic_t s_bal_goals;	/* goal hits */
-	atomic_t s_bal_breaks;	/* too long searches */
-	atomic_t s_bal_2orders;	/* 2^order hits */
+	atomic_unchecked_t s_bal_reqs;	/* number of reqs with len > 1 */
+	atomic_unchecked_t s_bal_success;	/* we found long enough chunks */
+	atomic_unchecked_t s_bal_allocated;	/* in blocks */
+	atomic_unchecked_t s_bal_ex_scanned;	/* total extents scanned */
+	atomic_unchecked_t s_bal_goals;	/* goal hits */
+	atomic_unchecked_t s_bal_breaks;	/* too long searches */
+	atomic_unchecked_t s_bal_2orders;	/* 2^order hits */
 	spinlock_t s_bal_lock;
 	unsigned long s_mb_buddies_generated;
 	unsigned long long s_mb_generation_time;
-	atomic_t s_mb_lost_chunks;
-	atomic_t s_mb_preallocated;
-	atomic_t s_mb_discarded;
+	atomic_unchecked_t s_mb_lost_chunks;
+	atomic_unchecked_t s_mb_preallocated;
+	atomic_unchecked_t s_mb_discarded;
 	atomic_t s_lock_busy;
 
 	/* locality groups */
@@ -1470,11 +1470,6 @@ static inline struct timespec ext4_current_time(struct inode *inode)
 static inline int ext4_valid_inum(struct super_block *sb, unsigned long ino)
 {
 	return ino == EXT4_ROOT_INO ||
-		ino == EXT4_USR_QUOTA_INO ||
-		ino == EXT4_GRP_QUOTA_INO ||
-		ino == EXT4_BOOT_LOADER_INO ||
-		ino == EXT4_JOURNAL_INO ||
-		ino == EXT4_RESIZE_INO ||
 		(ino >= EXT4_FIRST_INO(sb) &&
 		 ino <= le32_to_cpu(EXT4_SB(sb)->s_es->s_inodes_count));
 }
@@ -3073,9 +3068,6 @@ extern struct buffer_head *ext4_get_first_inline_block(struct inode *inode,
 extern int ext4_inline_data_fiemap(struct inode *inode,
 				   struct fiemap_extent_info *fieinfo,
 				   int *has_inline, __u64 start, __u64 len);
-extern int ext4_try_to_evict_inline_data(handle_t *handle,
-					 struct inode *inode,
-					 int needed);
 extern void ext4_inline_data_truncate(struct inode *inode, int *has_inline);
 
 extern int ext4_convert_inline_data(struct inode *inode);

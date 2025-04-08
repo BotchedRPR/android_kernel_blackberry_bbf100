@@ -324,10 +324,11 @@ config KSM
 	  root has set /sys/kernel/mm/ksm/run to 1 (if CONFIG_SYSFS is set).
 
 config DEFAULT_MMAP_MIN_ADDR
-        int "Low address space to protect from user allocation"
+	int "Low address space to protect from user allocation"
 	depends on MMU
-        default 4096
-        help
+	default 32768 if ALPHA || ARM || PARISC || SPARC32
+	default 65536
+	help
 	  This is the portion of low virtual memory which should be protected
 	  from userspace allocation.  Keeping a user from writing to low pages
 	  can help reduce the impact of kernel NULL pointer bugs.
@@ -341,6 +342,19 @@ config DEFAULT_MMAP_MIN_ADDR
 
 	  This value can be changed after boot using the
 	  /proc/sys/vm/mmap_min_addr tunable.
+
+#start: BBRY_ANDROID
+config PROTECTED_VARS
+	bool "Move critical kernel variables to read-only memory"
+	default y
+	help
+	  This option moves certain kernel variables into read-only memory,
+	  enforcing that updates to the variables be arbitrated.  It is
+	  designed to resist accidental or malicious modifications to
+	  highly-sensitive kernel variables.
+
+	  If unsure, say N
+#end: BBRY_ANDROID
 
 config ARCH_SUPPORTS_MEMORY_FAILURE
 	bool
@@ -359,8 +373,9 @@ config MEMORY_FAILURE
 
 config HWPOISON_INJECT
 	tristate "HWPoison pages injector"
-	depends on MEMORY_FAILURE && DEBUG_KERNEL && PROC_FS
+	depends on MEMORY_FAILURE && DEBUG_KERNEL && PROC_FS && !GRKERNSEC
 	select PROC_PAGE_MONITOR
+	depends on !GRKERNSEC
 
 config NOMMU_INITIAL_TRIM_EXCESS
 	int "Turn on mmap() excess space trimming before booting"
@@ -521,6 +536,7 @@ config MEM_SOFT_DIRTY
 	bool "Track memory changes"
 	depends on CHECKPOINT_RESTORE && HAVE_ARCH_SOFT_DIRTY && PROC_FS
 	select PROC_PAGE_MONITOR
+	depends on !GRKERNSEC
 	help
 	  This option enables memory changes tracking by introducing a
 	  soft-dirty bit on pte-s. This bit it set when someone writes
@@ -595,6 +611,7 @@ config ZSMALLOC_STAT
 	bool "Export zsmalloc statistics"
 	depends on ZSMALLOC
 	select DEBUG_FS
+	depends on !GRKERNSEC_KMEM
 	help
 	  This option enables code in the zsmalloc to collect various
 	  statistics about whats happening in zsmalloc and exports that

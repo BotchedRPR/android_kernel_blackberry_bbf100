@@ -7,13 +7,10 @@
 #include <linux/mutex.h>
 #include <linux/cpumask.h>
 #include <linux/nodemask.h>
+#include <linux/fs.h>
+#include <linux/cred.h>
 
 struct seq_operations;
-struct file;
-struct path;
-struct inode;
-struct dentry;
-struct user_namespace;
 
 struct seq_file {
 	char *buf;
@@ -27,9 +24,10 @@ struct seq_file {
 	struct mutex lock;
 	const struct seq_operations *op;
 	int poll_event;
-#ifdef CONFIG_USER_NS
-	struct user_namespace *user_ns;
+#ifdef CONFIG_GRKERNSEC_PROC_MEMMAP
+	u64 exec_id;
 #endif
+	const struct file *file;
 	void *private;
 };
 
@@ -39,6 +37,7 @@ struct seq_operations {
 	void * (*next) (struct seq_file *m, void *v, loff_t *pos);
 	int (*show) (struct seq_file *m, void *v);
 };
+typedef struct seq_operations __no_const seq_operations_no_const;
 
 #define SEQ_SKIP 1
 
@@ -111,6 +110,7 @@ void seq_pad(struct seq_file *m, char c);
 
 char *mangle_path(char *s, const char *p, const char *esc);
 int seq_open(struct file *, const struct seq_operations *);
+int seq_open_restrict(struct file *, const struct seq_operations *);
 ssize_t seq_read(struct file *, char __user *, size_t, loff_t *);
 loff_t seq_lseek(struct file *, loff_t, int);
 int seq_release(struct inode *, struct file *);
@@ -138,6 +138,7 @@ int seq_path_root(struct seq_file *m, const struct path *path,
 		  const struct path *root, const char *esc);
 
 int single_open(struct file *, int (*)(struct seq_file *, void *), void *);
+int single_open_restrict(struct file *, int (*)(struct seq_file *, void *), void *);
 int single_open_size(struct file *, int (*)(struct seq_file *, void *), void *, size_t);
 int single_release(struct inode *, struct file *);
 void *__seq_open_private(struct file *, const struct seq_operations *, int);
@@ -147,7 +148,7 @@ int seq_release_private(struct inode *, struct file *);
 static inline struct user_namespace *seq_user_ns(struct seq_file *seq)
 {
 #ifdef CONFIG_USER_NS
-	return seq->user_ns;
+	return seq->file->f_cred->user_ns;
 #else
 	extern struct user_namespace init_user_ns;
 	return &init_user_ns;

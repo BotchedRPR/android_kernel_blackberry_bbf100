@@ -275,7 +275,7 @@
 	.rodata1          : AT(ADDR(.rodata1) - LOAD_OFFSET) {		\
 		*(.rodata1)						\
 	}								\
-									\
+	PROTECTED_DATA(align)						\
 	BUG_TABLE							\
 									\
 	/* PCI quirks */						\
@@ -520,6 +520,7 @@
 	KERNEL_CTORS()							\
 	MCOUNT_REC()							\
 	*(.init.rodata)							\
+	*(.init.rodata.*)						\
 	FTRACE_EVENTS()							\
 	TRACE_SYSCALLS()						\
 	KPROBE_BLACKLIST()						\
@@ -545,6 +546,8 @@
 	*(.exit.data)							\
 	*(.fini_array)							\
 	*(.dtors)							\
+	*(.exit.rodata)							\
+	*(.exit.rodata.*)						\
 	MEM_DISCARD(exit.data)						\
 	MEM_DISCARD(exit.rodata)
 
@@ -624,6 +627,19 @@
 		.stab.index 0 : { *(.stab.index) }			\
 		.stab.indexstr 0 : { *(.stab.indexstr) }		\
 		.comment 0 : { *(.comment) }
+
+#ifdef CONFIG_PROTECTED_VARS
+#define PROTECTED_DATA(align)						\
+	. = ALIGN((align));						\
+	.protected : AT(ADDR(.protected) - LOAD_OFFSET) {		\
+		VMLINUX_SYMBOL(__start_protected) = .;			\
+		*(.protected)						\
+		VMLINUX_SYMBOL(__end_protected) = .;			\
+		. = ALIGN((align));					\
+	}
+#else
+#define PROTECTED_DATA(align)
+#endif
 
 #ifdef CONFIG_GENERIC_BUG
 #define BUG_TABLE							\
@@ -762,17 +778,18 @@
  * section in the linker script will go there too.  @phdr should have
  * a leading colon.
  *
- * Note that this macros defines __per_cpu_load as an absolute symbol.
+ * Note that this macros defines per_cpu_load as an absolute symbol.
  * If there is no need to put the percpu section at a predetermined
  * address, use PERCPU_SECTION.
  */
 #define PERCPU_VADDR(cacheline, vaddr, phdr)				\
-	VMLINUX_SYMBOL(__per_cpu_load) = .;				\
-	.data..percpu vaddr : AT(VMLINUX_SYMBOL(__per_cpu_load)		\
+	per_cpu_load = .;						\
+	.data..percpu vaddr : AT(VMLINUX_SYMBOL(per_cpu_load)		\
 				- LOAD_OFFSET) {			\
+		VMLINUX_SYMBOL(__per_cpu_load) = . + per_cpu_load;	\
 		PERCPU_INPUT(cacheline)					\
 	} phdr								\
-	. = VMLINUX_SYMBOL(__per_cpu_load) + SIZEOF(.data..percpu);
+	. = VMLINUX_SYMBOL(per_cpu_load) + SIZEOF(.data..percpu);
 
 /**
  * PERCPU_SECTION - define output section for percpu area, simple version
@@ -834,12 +851,14 @@
 
 #define INIT_DATA_SECTION(initsetup_align)				\
 	.init.data : AT(ADDR(.init.data) - LOAD_OFFSET) {		\
+		VMLINUX_SYMBOL(_sinitdata) = .;				\
 		INIT_DATA						\
 		INIT_SETUP(initsetup_align)				\
 		INIT_CALLS						\
 		CON_INITCALL						\
 		SECURITY_INITCALL					\
 		INIT_RAM_FS						\
+		VMLINUX_SYMBOL(_einitdata) = .;				\
 	}
 
 #define BSS_SECTION(sbss_align, bss_align, stop_align)			\

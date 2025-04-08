@@ -46,6 +46,33 @@ static unsigned int quirks;
 module_param(quirks, uint, S_IRUGO);
 MODULE_PARM_DESC(quirks, "Bit flags for quirks to be enabled as default");
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+int xhci_handshake_check_state(struct xhci_hcd *xhci,
+	void __iomem *ptr, u32 mask, u32 done, int usec)
+{
+	u32	result;
+
+	do {
+		result = readl(ptr);
+		if ((result == ~(u32)0)	|| 
+			(xhci->xhc_state == XHCI_STATE_REMOVING)) {
+			pr_err("WARNING: {0x%x,0x%x,%d}, reg_val:0x%x\n",
+					mask, done, usec, result);
+			return -ENODEV;
+		}
+
+		result &= mask;
+		if (result == done)
+			return 0;
+
+		udelay(1);
+		usec--;
+	} while (usec > 0);
+
+	return -ETIMEDOUT;
+}
+#endif
+
 /* TODO: copied from ehci-hcd.c - can this be refactored? */
 /*
  * xhci_handshake - spin reading hc until handshake completes or fails
@@ -205,7 +232,12 @@ int xhci_reset(struct xhci_hcd *xhci)
 		udelay(1000);
 
 	ret = xhci_handshake(&xhci->op_regs->command,
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			CMD_RESET, 0, 4 * 1000 * 1000);
+#else
 			CMD_RESET, 0, 10 * 1000 * 1000);
+#endif
+
 	if (ret)
 		return ret;
 
@@ -216,7 +248,11 @@ int xhci_reset(struct xhci_hcd *xhci)
 	 * than status until the "Controller Not Ready" flag is cleared.
 	 */
 	ret = xhci_handshake(&xhci->op_regs->status,
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			STS_CNR, 0, 4 * 1000 * 1000);
+#else
 			STS_CNR, 0, 10 * 1000 * 1000);
+#endif
 
 	for (i = 0; i < 2; ++i) {
 		xhci->bus_state[i].port_c_suspend = 0;
@@ -4868,7 +4904,7 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 	int			retval;
 
 	/* Accept arbitrarily long scatter-gather lists */
-	hcd->self.sg_tablesize = ~0;
+	hcd->self.sg_tablesize = SG_ALL;
 
 	/* support to build packet from discontinuous buffers */
 	hcd->self.no_sg_constraint = 1;

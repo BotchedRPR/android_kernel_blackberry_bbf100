@@ -20,6 +20,10 @@ struct vm_area_struct;		/* vma defining user mapping in mm_types.h */
 #define VM_NO_GUARD		0x00000040      /* don't add guard page */
 #define VM_KASAN		0x00000080      /* has allocated kasan shadow memory */
 #define VM_LOWMEM		0x00000100	/* Tracking of direct mapped lowmem */
+#if defined(CONFIG_X86) && defined(CONFIG_PAX_KERNEXEC)
+#define VM_KERNEXEC		0x00000200	/* allocate from executable kernel memory range */
+#endif
+#define VM_USERCOPY		0x00000400	/* allocation intended for copies to userland */
 
 /* bits [20..32] reserved for arch specific ioremap internals */
 
@@ -70,6 +74,7 @@ static inline void vmalloc_init(void)
 #endif
 
 extern void *vmalloc(unsigned long size);
+extern void *vmalloc_usercopy(unsigned long size);
 extern void *vzalloc(unsigned long size);
 extern void *vmalloc_user(unsigned long size);
 extern void *vmalloc_node(unsigned long size, int node);
@@ -89,6 +94,10 @@ extern void vfree_atomic(const void *addr);
 extern void *vmap(struct page **pages, unsigned int count,
 			unsigned long flags, pgprot_t prot);
 extern void vunmap(const void *addr);
+
+#ifdef CONFIG_GRKERNSEC_KSTACKOVERFLOW
+extern void unmap_process_stacks(struct task_struct *task);
+#endif
 
 extern int remap_vmalloc_range_partial(struct vm_area_struct *vma,
 				       unsigned long uaddr, void *kaddr,
@@ -154,7 +163,7 @@ extern void free_vm_area(struct vm_struct *area);
 
 /* for /dev/kmem */
 extern long vread(char *buf, char *addr, unsigned long count);
-extern long vwrite(char *buf, char *addr, unsigned long count);
+extern long vwrite(char *buf, char *addr, unsigned long count) __size_overflow(3);
 
 /*
  *	Internals.  Dont't use..

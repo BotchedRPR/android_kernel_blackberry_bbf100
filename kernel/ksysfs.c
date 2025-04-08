@@ -2,6 +2,7 @@
  * kernel/ksysfs.c - sysfs attributes in /sys/kernel, which
  * 		     are not related to any other subsystem
  *
+ * Copyright (C) 2016 BlackBerry Limited
  * Copyright (C) 2004 Kay Sievers <kay.sievers@vrfy.org>
  * 
  * This file is release under the GPLv2
@@ -44,12 +45,15 @@ static ssize_t uevent_helper_show(struct kobject *kobj,
 {
 	return sprintf(buf, "%s\n", uevent_helper);
 }
+#ifdef CONFIG_BBSECURE_UEVENT_HELPER_WRITABLE
 static ssize_t uevent_helper_store(struct kobject *kobj,
 				   struct kobj_attribute *attr,
 				   const char *buf, size_t count)
 {
 	if (count+1 > UEVENT_HELPER_PATH_LEN)
 		return -ENOENT;
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
 	memcpy(uevent_helper, buf, count);
 	uevent_helper[count] = '\0';
 	if (count && uevent_helper[count-1] == '\n')
@@ -57,6 +61,9 @@ static ssize_t uevent_helper_store(struct kobject *kobj,
 	return count;
 }
 KERNEL_ATTR_RW(uevent_helper);
+#else
+KERNEL_ATTR_RO(uevent_helper);
+#endif
 #endif
 
 #ifdef CONFIG_PROFILING
@@ -176,7 +183,7 @@ static ssize_t notes_read(struct file *filp, struct kobject *kobj,
 	return count;
 }
 
-static struct bin_attribute notes_attr = {
+static bin_attribute_no_const notes_attr __read_only = {
 	.attr = {
 		.name = "notes",
 		.mode = S_IRUGO,

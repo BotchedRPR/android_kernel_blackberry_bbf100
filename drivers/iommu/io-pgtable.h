@@ -140,10 +140,13 @@ struct io_pgtable_ops {
  * @cookie: An opaque token provided by the IOMMU driver and passed back to
  *          the callback routines in cfg->tlb.
  */
-struct io_pgtable_ops *alloc_io_pgtable_ops(enum io_pgtable_fmt fmt,
-					    struct io_pgtable_cfg *cfg,
-					    void *cookie);
+struct io_pgtable *alloc_io_pgtable(enum io_pgtable_fmt fmt,
+				    struct io_pgtable_cfg *cfg,
+				    void *cookie);
 
+struct io_pgtable_ops *alloc_io_pgtable_ops(enum io_pgtable_fmt fmt,
+                                            struct io_pgtable_cfg *cfg,
+                                            void *cookie);
 /**
  * free_io_pgtable_ops() - Free an io_pgtable_ops structure. The caller
  *                         *must* ensure that the page table is no longer
@@ -171,7 +174,8 @@ struct io_pgtable {
 	enum io_pgtable_fmt	fmt;
 	void			*cookie;
 	struct io_pgtable_cfg	cfg;
-	struct io_pgtable_ops	ops;
+	struct io_pgtable_ops   ops;
+
 };
 
 /**

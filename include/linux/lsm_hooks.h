@@ -661,6 +661,27 @@
  *	@p contains the task_struct for the task.
  *	@inode contains the inode structure for the inode.
  *
+ * start: BBSECURE_BIDE
+ * @task_fix_setgid:
+ *	Update the module's state after setting one or more of the group
+ *	identity attributes of the current process.
+ *	The @flags parameter indicates which of the set*gid system
+ *	calls invoked this hook.
+ *	@new is the set of credentials that will be installed,
+ *	modifications should be made to this rather than to @current->cred.
+ *	@old is the set of credentials that are being replaced
+ *	@flags contains once of the LSM_SETID* values.
+ *	Return 0 if the hook is successful and permission is granted,
+ *	non-zero otherwise.
+ *
+ * @task_set_groups:
+ *	Set the supplementary groups for a task.
+ *	@old The current set of supplementary groups for the task
+ *	@new The new set of supplementary groups for the task.
+ *	Return 0 if the hook is successful and permission is granted,
+ *	non-zero otherwise.
+ * end: BBSECURE_BIDE
+ *
  * Security hooks for Netlink messaging.
  *
  * @netlink_send:
@@ -1446,6 +1467,11 @@ union security_list_options {
 
 	int (*task_create)(unsigned long clone_flags);
 	void (*task_free)(struct task_struct *task);
+/* start:BBSECURE_BIDE */
+#ifdef CONFIG_BBSECURE_BIDE
+	void (*task_created_notify)(struct task_struct *task, unsigned long flags);
+#endif
+/* end:BBSECURE_BIDE */
 	int (*cred_alloc_blank)(struct cred *cred, gfp_t gfp);
 	void (*cred_free)(struct cred *cred);
 	int (*cred_prepare)(struct cred *new, const struct cred *old,
@@ -1476,7 +1502,13 @@ union security_list_options {
 	int (*task_prctl)(int option, unsigned long arg2, unsigned long arg3,
 				unsigned long arg4, unsigned long arg5);
 	void (*task_to_inode)(struct task_struct *p, struct inode *inode);
-
+/* start:BBSECURE_BIDE */
+#ifdef CONFIG_BBSECURE_BIDE
+	int (*task_fix_setgid)(struct cred *new, const struct cred *old,
+				int flags);
+	int (*task_set_groups)(struct group_info *old, struct group_info *new);
+#endif
+/* end:BBSECURE_BIDE */
 	int (*ipc_permission)(struct kern_ipc_perm *ipcp, short flag);
 	void (*ipc_getsecid)(struct kern_ipc_perm *ipcp, u32 *secid);
 
@@ -1711,6 +1743,11 @@ struct security_hook_heads {
 	struct list_head task_free;
 	struct list_head cred_alloc_blank;
 	struct list_head cred_free;
+/* start:BBSECURE_BIDE */
+#ifdef CONFIG_BBSECURE_BIDE
+	struct list_head task_created_notify;
+#endif
+/* end:BBSECURE_BIDE */
 	struct list_head cred_prepare;
 	struct list_head cred_transfer;
 	struct list_head kernel_act_as;
@@ -1734,6 +1771,12 @@ struct security_hook_heads {
 	struct list_head task_wait;
 	struct list_head task_prctl;
 	struct list_head task_to_inode;
+/* start:BBSECURE_BIDE */
+#ifdef CONFIG_BBSECURE_BIDE
+	struct list_head task_fix_setgid;
+	struct list_head task_set_groups;
+#endif
+/* end:BBSECURE_BIDE */
 	struct list_head ipc_permission;
 	struct list_head ipc_getsecid;
 	struct list_head msg_msg_alloc_security;
@@ -1829,7 +1872,7 @@ struct security_hook_heads {
 	struct list_head audit_rule_match;
 	struct list_head audit_rule_free;
 #endif /* CONFIG_AUDIT */
-};
+} __randomize_layout;
 
 /*
  * Security module hook list structure.
@@ -1839,7 +1882,7 @@ struct security_hook_list {
 	struct list_head		list;
 	struct list_head		*head;
 	union security_list_options	hook;
-};
+} __randomize_layout;
 
 /*
  * Initializing a security_hook_list structure takes
@@ -1861,7 +1904,7 @@ static inline void security_add_hooks(struct security_hook_list *hooks,
 		list_add_tail_rcu(&hooks[i].list, hooks[i].head);
 }
 
-#ifdef CONFIG_SECURITY_SELINUX_DISABLE
+#if defined(CONFIG_SECURITY_SELINUX_DISABLE) || defined(CONFIG_BBSECURE_LSM_TEST_SUPPORT)
 /*
  * Assuring the safety of deleting a security module is up to
  * the security module involved. This may entail ordering the
@@ -1882,7 +1925,7 @@ static inline void security_delete_hooks(struct security_hook_list *hooks,
 	for (i = 0; i < count; i++)
 		list_del_rcu(&hooks[i].list);
 }
-#endif /* CONFIG_SECURITY_SELINUX_DISABLE */
+#endif /* CONFIG_SECURITY_SELINUX_DISABLE or CONFIG_BBSECURE_LSM_TEST_SUPPORT */
 
 extern int __init security_module_enable(const char *module);
 extern void __init capability_add_hooks(void);

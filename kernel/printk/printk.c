@@ -59,6 +59,12 @@
 extern void printascii(char *);
 #endif
 
+/* MODIFIED-BEGIN by TCTNB huaidi.feng, add timestamps 2016-11-04,BUG-3358653*/
+#define TCT_TARGET_DMESG_INFO
+#ifdef  TCT_TARGET_DMESG_INFO
+#include <linux/rtc.h>
+#endif
+/* MODIFIED-END by huaidi.feng,BUG-3358653*/
 int console_printk[4] = {
 	CONSOLE_LOGLEVEL_DEFAULT,	/* console_loglevel */
 	MESSAGE_LOGLEVEL_DEFAULT,	/* default_message_loglevel */
@@ -482,7 +488,7 @@ static int log_store(int facility, int level,
 	return msg->text_len;
 }
 
-int dmesg_restrict = IS_ENABLED(CONFIG_SECURITY_DMESG_RESTRICT);
+int dmesg_restrict __read_only = IS_ENABLED(CONFIG_SECURITY_DMESG_RESTRICT);
 
 static int syslog_action_restricted(int type)
 {
@@ -504,6 +510,11 @@ int check_syslog_permissions(int type, int source)
 	 */
 	if (source == SYSLOG_FROM_PROC && type != SYSLOG_ACTION_OPEN)
 		goto ok;
+
+#ifdef CONFIG_GRKERNSEC_DMESG
+	if (grsec_enable_dmesg && !capable(CAP_SYSLOG) && !capable_nolog(CAP_SYS_ADMIN))
+		return -EPERM;
+#endif
 
 	if (syslog_action_restricted(type)) {
 		if (capable(CAP_SYSLOG))
@@ -1676,6 +1687,15 @@ asmlinkage int vprintk_emit(int facility, int level,
 	/* cpu currently holding logbuf_lock in this function */
 	static unsigned int logbuf_cpu = UINT_MAX;
 
+        /* MODIFIED-BEGIN by TCTNB huaidi.feng, add timestamps 2016-11-04,BUG-3358653*/
+        #ifdef TCT_TARGET_DMESG_INFO
+        static char textbuf1[LOG_LINE_MAX];
+        struct rtc_time tm;
+        unsigned long sec;
+        int timezone_hours;
+        static bool is_first_len=true;
+        #endif
+        /* MODIFIED-END by huaidi.feng,BUG-3358653*/
 	if (level == LOGLEVEL_SCHED) {
 		level = LOGLEVEL_DEFAULT;
 		in_sched = true;
@@ -1729,10 +1749,14 @@ asmlinkage int vprintk_emit(int facility, int level,
 	text_len = vscnprintf(text, sizeof(textbuf), fmt, args);
 
 	/* mark and strip a trailing newline */
+        /* MODIFIED-BEGIN by TCTNB huaidi.feng, add timestamps 2016-11-04,BUG-3358653*/
+        #ifndef TCT_TARGET_DMESG_INFO
 	if (text_len && text[text_len-1] == '\n') {
 		text_len--;
 		lflags |= LOG_NEWLINE;
 	}
+        #endif
+        /* MODIFIED-END by huaidi.feng,BUG-3358653*/
 
 	/* strip kernel syslog prefix and extract log level or control flags */
 	if (facility == 0) {
@@ -1758,6 +1782,25 @@ asmlinkage int vprintk_emit(int facility, int level,
 		}
 	}
 
+/* MODIFIED-BEGIN by TCTNB huaidi.feng, add timestamps 2016-11-04,BUG-3358653*/
+#ifdef TCT_TARGET_DMESG_INFO
+        if (is_first_len) {
+                sec=get_seconds();
+                sec -= sys_tz.tz_minuteswest*60;
+                rtc_time_to_tm(sec, &tm);
+                timezone_hours = 0-sys_tz.tz_minuteswest/60;
+                text_len= snprintf(textbuf1,sizeof(textbuf1),"[%d-%02d-%02d %02d:%02d:%02d GMT%+d]%s",tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+				tm.tm_hour, tm.tm_min, tm.tm_sec, timezone_hours,text);
+                text=textbuf1;
+                is_first_len=false;
+        }
+	if (text_len && text[text_len-1] == '\n') {
+		text_len--;
+		lflags |= LOG_NEWLINE;
+                is_first_len=true;
+	}
+#endif
+/* MODIFIED-END by huaidi.feng,BUG-3358653*/
 #ifdef CONFIG_EARLY_PRINTK_DIRECT
 	printascii(text);
 #endif

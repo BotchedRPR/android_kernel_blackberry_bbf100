@@ -145,6 +145,16 @@ static inline bool test_and_clear_restore_sigmask(void)
 #error "no set_restore_sigmask() provided and default one won't work"
 #endif
 
+#if 0  // use CONFIG_HARDENED_USERCOPY version of the implementation
+extern void __check_object_size(const void *ptr, unsigned long n, bool to_user, bool const_size);
+
+static inline void check_object_size(const void *ptr, unsigned long n, bool to_user)
+{
+	__check_object_size(ptr, n, to_user, __builtin_constant_p(n));
+}
+
+#endif
+
 #ifndef CONFIG_HAVE_ARCH_WITHIN_STACK_FRAMES
 static inline int arch_within_stack_frames(const void * const stack,
 					   const void * const stackend,

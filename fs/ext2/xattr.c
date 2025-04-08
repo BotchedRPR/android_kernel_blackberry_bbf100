@@ -246,7 +246,7 @@ ext2_xattr_list(struct dentry *dentry, char *buffer, size_t buffer_size)
 	struct buffer_head *bh = NULL;
 	struct ext2_xattr_entry *entry;
 	char *end;
-	size_t rest = buffer_size;
+	size_t rest = buffer_size, total_size = 0;
 	int error;
 	struct mb2_cache *ext2_mb_cache = EXT2_SB(inode->i_sb)->s_mb_cache;
 
@@ -304,9 +304,10 @@ bad_block:	ext2_error(inode->i_sb, "ext2_xattr_list",
 				buffer += size;
 			}
 			rest -= size;
+			total_size += size;
 		}
 	}
-	error = buffer_size - rest;  /* total size */
+	error = total_size;
 
 cleanup:
 	brelse(bh);

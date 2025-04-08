@@ -72,6 +72,8 @@ static ssize_t power_supply_show_property(struct device *dev,
 	static char *scope_text[] = {
 		"Unknown", "System", "Device"
 	};
+
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 	static char *typec_text[] = {
 		"Nothing attached", "Sink attached", "Powered cable w/ sink",
 		"Debug Accessory", "Audio Adapter", "Powered cable w/o sink",
@@ -80,6 +82,8 @@ static ssize_t power_supply_show_property(struct device *dev,
 		"Source attached (high current)",
 		"Non compliant",
 	};
+#endif
+
 	static char *typec_pr_text[] = {
 		"none", "dual power role", "sink", "source"
 	};
@@ -119,8 +123,10 @@ static ssize_t power_supply_show_property(struct device *dev,
 		return sprintf(buf, "%s\n", type_text[value.intval]);
 	else if (off == POWER_SUPPLY_PROP_SCOPE)
 		return sprintf(buf, "%s\n", scope_text[value.intval]);
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 	else if (off == POWER_SUPPLY_PROP_TYPEC_MODE)
 		return sprintf(buf, "%s\n", typec_text[value.intval]);
+#endif
 	else if (off == POWER_SUPPLY_PROP_TYPEC_POWER_ROLE)
 		return sprintf(buf, "%s\n", typec_pr_text[value.intval]);
 	else if (off == POWER_SUPPLY_PROP_DIE_HEALTH)
@@ -305,6 +311,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(pd_voltage_max),
 	POWER_SUPPLY_ATTR(pd_voltage_min),
 	POWER_SUPPLY_ATTR(sdp_current_max),
+
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_ATTR(charge_counter_ext),
 	/* Properties of type `const char *' */
@@ -349,16 +356,14 @@ static struct attribute_group power_supply_attr_group = {
 	.is_visible = power_supply_attr_is_visible,
 };
 
-static const struct attribute_group *power_supply_attr_groups[] = {
+const struct attribute_group *power_supply_attr_groups[] = {
 	&power_supply_attr_group,
 	NULL,
 };
 
-void power_supply_init_attrs(struct device_type *dev_type)
+void power_supply_init_attrs(void)
 {
 	int i;
-
-	dev_type->groups = power_supply_attr_groups;
 
 	for (i = 0; i < ARRAY_SIZE(power_supply_attrs); i++)
 		__power_supply_attrs[i] = &power_supply_attrs[i].attr;

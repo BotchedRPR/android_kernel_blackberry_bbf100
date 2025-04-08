@@ -277,7 +277,7 @@ static int packet_direct_xmit(struct sk_buff *skb)
 
 	return ret;
 drop:
-	atomic_long_inc(&dev->tx_dropped);
+	atomic_long_inc_unchecked(&dev->tx_dropped);
 	kfree_skb_list(skb);
 	return NET_XMIT_DROP;
 }
@@ -1391,9 +1391,9 @@ static unsigned int fanout_demux_rollover(struct packet_fanout *f,
 		    packet_rcv_has_room(po_next, skb) == ROOM_NORMAL) {
 			if (i != j)
 				po->rollover->sock = i;
-			atomic_long_inc(&po->rollover->num);
+			atomic_long_inc_unchecked(&po->rollover->num);
 			if (room == ROOM_LOW)
-				atomic_long_inc(&po->rollover->num_huge);
+				atomic_long_inc_unchecked(&po->rollover->num_huge);
 			return i;
 		}
 
@@ -1401,7 +1401,7 @@ static unsigned int fanout_demux_rollover(struct packet_fanout *f,
 			i = 0;
 	} while (i != j);
 
-	atomic_long_inc(&po->rollover->num_failed);
+	atomic_long_inc_unchecked(&po->rollover->num_failed);
 	return idx;
 }
 
@@ -1666,9 +1666,9 @@ static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
 		rollover = kzalloc(sizeof(*rollover), GFP_KERNEL);
 		if (!rollover)
 			goto out;
-		atomic_long_set(&rollover->num, 0);
-		atomic_long_set(&rollover->num_huge, 0);
-		atomic_long_set(&rollover->num_failed, 0);
+		atomic_long_set_unchecked(&po->rollover->num, 0);
+		atomic_long_set_unchecked(&po->rollover->num_huge, 0);
+		atomic_long_set_unchecked(&po->rollover->num_failed, 0);
 		po->rollover = rollover;
 	}
 
@@ -1694,7 +1694,7 @@ static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
 		match->flags = flags;
 		INIT_LIST_HEAD(&match->list);
 		spin_lock_init(&match->lock);
-		atomic_set(&match->sk_ref, 0);
+		refcount_set(&match->sk_ref, 0);
 		fanout_init_data(match);
 		match->prot_hook.type = po->prot_hook.type;
 		match->prot_hook.dev = po->prot_hook.dev;
@@ -1708,10 +1708,10 @@ static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
 	    match->prot_hook.type == po->prot_hook.type &&
 	    match->prot_hook.dev == po->prot_hook.dev) {
 		err = -ENOSPC;
-		if (atomic_read(&match->sk_ref) < PACKET_FANOUT_MAX) {
+		if (refcount_read(&match->sk_ref) < PACKET_FANOUT_MAX) {
 			__dev_remove_pack(&po->prot_hook);
 			po->fanout = match;
-			atomic_inc(&match->sk_ref);
+			refcount_set(&match->sk_ref, refcount_read(&match->sk_ref) + 1);
 			__fanout_link(sk, po);
 			err = 0;
 		}
@@ -1740,7 +1740,7 @@ static struct packet_fanout *fanout_release(struct sock *sk)
 	if (f) {
 		po->fanout = NULL;
 
-		if (atomic_dec_and_test(&f->sk_ref))
+		if (refcount_dec_and_test(&f->sk_ref))
 			list_del(&f->list);
 		else
 			f = NULL;
@@ -2087,7 +2087,7 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 drop_n_acct:
 	spin_lock(&sk->sk_receive_queue.lock);
 	po->stats.stats1.tp_drops++;
-	atomic_inc(&sk->sk_drops);
+	atomic_inc_unchecked(&sk->sk_drops);
 	spin_unlock(&sk->sk_receive_queue.lock);
 
 drop_n_restore:
@@ -2938,12 +2938,14 @@ static int packet_do_bind(struct sock *sk, const char *name, int ifindex,
 	int ret = 0;
 	bool unlisted = false;
 
-	if (po->fanout)
-		return -EINVAL;
-
 	lock_sock(sk);
 	spin_lock(&po->bind_lock);
 	rcu_read_lock();
+
+	if (po->fanout) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
 
 	if (name) {
 		dev = dev_get_by_name_rcu(sock_net(sk), name);
@@ -3622,14 +3624,19 @@ packet_setsockopt(struct socket *sock, int level, int optname, char __user *optv
 
 		if (optlen != sizeof(val))
 			return -EINVAL;
-		if (po->rx_ring.pg_vec || po->tx_ring.pg_vec)
-			return -EBUSY;
 		if (copy_from_user(&val, optval, sizeof(val)))
 			return -EFAULT;
 		if (val > INT_MAX)
 			return -EINVAL;
-		po->tp_reserve = val;
-		return 0;
+		lock_sock(sk);
+		if (po->rx_ring.pg_vec || po->tx_ring.pg_vec) {
+			ret = -EBUSY;
+		} else {
+			po->tp_reserve = val;
+			ret = 0;
+		}
+		release_sock(sk);
+		return ret;
 	}
 	case PACKET_LOSS:
 	{
@@ -3797,7 +3804,7 @@ static int packet_getsockopt(struct socket *sock, int level, int optname,
 	case PACKET_HDRLEN:
 		if (len > sizeof(int))
 			len = sizeof(int);
-		if (copy_from_user(&val, optval, len))
+		if (len > sizeof(val) || copy_from_user(&val, optval, len))
 			return -EFAULT;
 		switch (val) {
 		case TPACKET_V1:
@@ -3832,9 +3839,9 @@ static int packet_getsockopt(struct socket *sock, int level, int optname,
 	case PACKET_ROLLOVER_STATS:
 		if (!po->rollover)
 			return -EINVAL;
-		rstats.tp_all = atomic_long_read(&po->rollover->num);
-		rstats.tp_huge = atomic_long_read(&po->rollover->num_huge);
-		rstats.tp_failed = atomic_long_read(&po->rollover->num_failed);
+		rstats.tp_all = atomic_long_read_unchecked(&po->rollover->num);
+		rstats.tp_huge = atomic_long_read_unchecked(&po->rollover->num_huge);
+		rstats.tp_failed = atomic_long_read_unchecked(&po->rollover->num_failed);
 		data = &rstats;
 		lv = sizeof(rstats);
 		break;
@@ -3852,7 +3859,7 @@ static int packet_getsockopt(struct socket *sock, int level, int optname,
 		len = lv;
 	if (put_user(len, optlen))
 		return -EFAULT;
-	if (copy_to_user(optval, data, len))
+	if (len > sizeof(st) || copy_to_user(optval, data, len))
 		return -EFAULT;
 	return 0;
 }

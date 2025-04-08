@@ -565,7 +565,7 @@ void tcp_retransmit_timer(struct sock *sk);
 void tcp_xmit_retransmit_queue(struct sock *);
 void tcp_simple_retransmit(struct sock *);
 int tcp_trim_head(struct sock *, struct sk_buff *, u32);
-int tcp_fragment(struct sock *, struct sk_buff *, u32, unsigned int, gfp_t);
+int tcp_fragment(struct sock *, struct sk_buff *, u32, unsigned int, gfp_t) __intentional_overflow(3);
 
 void tcp_send_probe0(struct sock *);
 void tcp_send_partial(struct sock *);
@@ -751,8 +751,8 @@ static inline u32 tcp_skb_timestamp(const struct sk_buff *skb)
  * If this grows please adjust skbuff.h:skbuff->cb[xxx] size appropriately.
  */
 struct tcp_skb_cb {
-	__u32		seq;		/* Starting sequence number	*/
-	__u32		end_seq;	/* SEQ + FIN + SYN + datalen	*/
+	__u32		seq __intentional_overflow(-1);	/* Starting sequence number	*/
+	__u32		end_seq __intentional_overflow(-1);	/* SEQ + FIN + SYN + datalen	*/
 	union {
 		/* Note : tcp_tw_isn is used in input path only
 		 *	  (isn chosen by tcp_timewait_state_process())
@@ -780,7 +780,7 @@ struct tcp_skb_cb {
 
 	__u8		ip_dsfield;	/* IPv4 tos or IPv6 dsfield	*/
 	/* 1 byte hole */
-	__u32		ack_seq;	/* Sequence number ACK'd	*/
+	__u32		ack_seq __intentional_overflow(-1);	/* Sequence number ACK'd	*/
 	union {
 		struct inet_skb_parm	h4;
 #if IS_ENABLED(CONFIG_IPV6)
@@ -1462,7 +1462,7 @@ struct tcp_fastopen_context {
 	__u8			key[TCP_FASTOPEN_KEY_LENGTH];
 	struct rcu_head		rcu;
 };
-
+static inline void tcp_init_send_head(struct sock *sk); // MODIFIED by hongwei.tian, 2020-02-17,BUG-8871041
 /* write queue abstraction */
 static inline void tcp_write_queue_purge(struct sock *sk)
 {
@@ -1470,6 +1470,7 @@ static inline void tcp_write_queue_purge(struct sock *sk)
 
 	while ((skb = __skb_dequeue(&sk->sk_write_queue)) != NULL)
 		sk_wmem_free_skb(sk, skb);
+	tcp_init_send_head(sk); // MODIFIED by hongwei.tian, 2020-02-17,BUG-8871041
 	sk_mem_reclaim(sk);
 	tcp_clear_all_retrans_hints(tcp_sk(sk));
 }

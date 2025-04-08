@@ -4,6 +4,7 @@
 #include <linux/compiler.h>
 #include <linux/stringify.h>
 #include <linux/export.h>
+#include <linux/protected.h>
 #include <asm/linkage.h>
 
 /* Some toolchains use other characters (e.g. '`') to mark new line in macro */
@@ -36,6 +37,7 @@
 #endif
 
 #define __page_aligned_data	__section(.data..page_aligned) __aligned(PAGE_SIZE)
+#define __page_aligned_rodata	__read_only __aligned(PAGE_SIZE)
 #define __page_aligned_bss	__section(.bss..page_aligned) __aligned(PAGE_SIZE)
 
 /*

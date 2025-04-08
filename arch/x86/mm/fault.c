@@ -618,6 +618,10 @@ show_fault_oops(struct pt_regs *regs, unsigned long error_code,
 	printk(KERN_ALERT "BUG: unable to handle kernel ");
 	if (address < PAGE_SIZE)
 		printk(KERN_CONT "NULL pointer dereference");
+#ifdef CONFIG_PROTECTED_VARS
+        else if (address >= (unsigned long)__start_protected && address < (unsigned long)__end_protected)
+            printk(KERN_CONT "write to protected variable");
+#endif
 	else
 		printk(KERN_CONT "paging request");
 

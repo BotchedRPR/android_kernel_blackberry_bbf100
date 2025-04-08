@@ -29,3 +29,8 @@ obj-$(CONFIG_CGROUP_DEVICE)		+= device_cgroup.o
 # Object integrity file lists
 subdir-$(CONFIG_INTEGRITY)		+= integrity
 obj-$(CONFIG_INTEGRITY)			+= integrity/
+
+#start:BBSECURE_PATHTRUST
+subdir-$(CONFIG_BBSECURE_PATHTRUST)		+= pathtrust
+obj-$(CONFIG_BBSECURE_PATHTRUST)		+= pathtrust/
+#end:BBSECURE_PATHTRUST

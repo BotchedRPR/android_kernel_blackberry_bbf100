@@ -50,6 +50,7 @@
 
 static atomic_t fsnotify_sync_cookie = ATOMIC_INIT(0);
 
+
 /**
  * fsnotify_get_cookie - return a unique cookie for use in synchronizing events.
  * Called from fsnotify_move, which is inlined into filesystem modules.

@@ -154,6 +154,13 @@ extern void mnt_pin_kill(struct mount *m);
  */
 extern struct dentry_operations ns_dentry_operations;
 
+/*
+ * fs/ioctl.c
+ */
+extern int do_vfs_ioctl(struct file *file, unsigned int fd, unsigned int cmd,
+		    unsigned long arg);
+extern long vfs_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+
 #ifdef CONFIG_FILE_TABLE_DEBUG
 void global_filetable_print_warning_once(void);
 void global_filetable_add(struct file *filp);

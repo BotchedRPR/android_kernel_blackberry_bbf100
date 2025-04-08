@@ -161,7 +161,8 @@ static int tbf_segment(struct sk_buff *skb, struct Qdisc *sch)
 	struct sk_buff *segs, *nskb;
 	netdev_features_t features = netif_skb_features(skb);
 	unsigned int len = 0, prev_len = qdisc_pkt_len(skb);
-	int ret, nb;
+	int ret;
+	unsigned int nb;
 
 	segs = skb_gso_segment(skb, features & ~NETIF_F_GSO_MASK);
 
