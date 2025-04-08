@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -682,7 +682,6 @@ static void cleanup_stats(struct lpm_stats *stats)
 {
 	struct list_head *centry = NULL;
 	struct lpm_stats *pos = NULL;
-	/* MODIFIED-BEGIN by hongwei.tian, 2018-07-07,BUG-6554265*/
 	struct lpm_stats *n = NULL;
 
 	centry = &stats->child;
@@ -691,7 +690,6 @@ static void cleanup_stats(struct lpm_stats *stats)
 			cleanup_stats(pos);
 			continue;
 		}
-		/* MODIFIED-END by hongwei.tian,BUG-6554265*/
 
 		list_del_init(&pos->child);
 
