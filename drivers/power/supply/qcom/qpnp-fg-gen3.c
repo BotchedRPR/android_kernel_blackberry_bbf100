@@ -384,7 +384,11 @@ static struct fg_alg_flag pmi8998_v2_alg_flags[] = {
 	},
 };
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+int fg_gen3_debug_mask = 0;
+#else
 static int fg_gen3_debug_mask;
+#endif
 module_param_named(
 	debug_mask, fg_gen3_debug_mask, int, S_IRUSR | S_IWUSR
 );
@@ -529,8 +533,15 @@ static int fg_get_sram_prop(struct fg_chip *chip, enum fg_sram_param_id id,
 	if (id < 0 || id > FG_SRAM_MAX || chip->sp[id].len > sizeof(buf))
 		return -EINVAL;
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (chip->battery_missing) {
+		pr_err("Error: battery missing detected\n");
+		return -ENODATA;
+	}
+#else
 	if (chip->battery_missing)
 		return -ENODATA;
+#endif
 
 	rc = fg_sram_read(chip, chip->sp[id].addr_word, chip->sp[id].addr_byte,
 		buf, chip->sp[id].len, FG_IMA_DEFAULT);
@@ -745,6 +756,7 @@ static bool is_batt_empty(struct fg_chip *chip)
 	return ((vbatt_uv < chip->dt.cutoff_volt_mv * 1000) ? true : false);
 }
 
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 static int fg_get_debug_batt_id(struct fg_chip *chip, int *batt_id)
 {
 	int rc;
@@ -778,7 +790,10 @@ static int fg_get_debug_batt_id(struct fg_chip *chip, int *batt_id)
 	pr_debug("debug batt_id range: [%d %d]\n", batt_id[0], batt_id[1]);
 	return 0;
 }
+#endif
 
+
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 static bool is_debug_batt_id(struct fg_chip *chip)
 {
 	int debug_batt_id[2], rc;
@@ -801,6 +816,7 @@ static bool is_debug_batt_id(struct fg_chip *chip)
 
 	return false;
 }
+#endif
 
 #define DEBUG_BATT_SOC	67
 #define BATT_MISS_SOC	50
@@ -809,10 +825,12 @@ static int fg_get_prop_capacity(struct fg_chip *chip, int *val)
 {
 	int rc, msoc;
 
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 	if (is_debug_batt_id(chip)) {
 		*val = DEBUG_BATT_SOC;
 		return 0;
 	}
+#endif
 
 	if (chip->fg_restarting) {
 		*val = chip->last_soc;
@@ -879,8 +897,15 @@ static int fg_get_batt_id(struct fg_chip *chip)
 {
 	int rc, ret, batt_id = 0;
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (!chip->batt_id_chan) {
+		pr_err("ERROR: rradc chan for batt_id not ready!\n");
+		return -EINVAL;
+	}
+#else
 	if (!chip->batt_id_chan)
 		return -EINVAL;
+#endif
 
 	rc = fg_batt_missing_config(chip, false);
 	if (rc < 0) {
@@ -905,6 +930,11 @@ out:
 		pr_err("Error in enabling BMD, ret=%d\n", ret);
 		return ret;
 	}
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	/* Wait for 200ms to make BMD stable before enable IRQ */
+	msleep(200);
+#endif
 
 	vote(chip->batt_miss_irq_en_votable, BATT_MISS_IRQ_VOTER, true, 0);
 	return rc;
@@ -1735,6 +1765,11 @@ static int fg_charge_full_update(struct fg_chip *chip)
 		if (msoc >= 99 && chip->health == POWER_SUPPLY_HEALTH_GOOD) {
 			fg_dbg(chip, FG_STATUS, "Setting charge_full to true\n");
 			chip->charge_full = true;
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			pr_info("TCTNB_FULL\n");
+#endif
+
 			/*
 			 * Lower the recharge voltage so that VBAT_LT_RECHG
 			 * signal will not be asserted soon.
@@ -1926,6 +1961,123 @@ static int fg_set_recharge_soc(struct fg_chip *chip, int recharge_soc)
 	return 0;
 }
 
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+static bool fg_check_fv_limited(struct fg_chip *chip)
+{
+	int rc = 0;
+	union power_supply_propval prop = {0, };
+
+	if (!chip->batt_psy)
+		return false;
+
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
+	if (rc < 0) {
+		pr_err("Error in getting voltage_max property on batt_psy, rc=%d\n",
+			rc);
+		return false;
+	}
+
+	fg_dbg(chip, FG_STATUS, "fv: (%d < %d) ??? \n", 
+			prop.intval, chip->bp.float_volt_uv);
+
+	if ((prop.intval < chip->bp.float_volt_uv) 
+		&& (prop.intval > 3600000))
+		return true;
+	else
+		return false;
+}
+
+#define MAX_DEBOUNCE_MS (30000ULL)
+#define FORCE_RESTORE_TEMP (400)
+static int fg_adjust_recharge_soc(struct fg_chip *chip)
+{
+	int rc, msoc;
+	int recharge_soc, new_recharge_soc = 0;
+	int batt_temp = 300;
+	bool recharge_soc_status, curr_fv_limited = false;
+	static bool fv_limited = false;
+	static ktime_t last_update_time = {0};
+	u64 elapsed_ms = 0;
+
+	if (!chip->dt.auto_recharge_soc)
+		return 0;
+
+	recharge_soc = chip->dt.recharge_soc_thr;
+	recharge_soc_status = chip->recharge_soc_adjusted;
+
+	fg_dbg(chip, FG_STATUS, "==> rs:%d, cd:%d, fl:%d\n", 
+			recharge_soc_status, chip->charge_done, fv_limited);
+
+	if (is_input_present(chip)) {
+		elapsed_ms = ktime_ms_delta(ktime_get(), last_update_time);
+		if (elapsed_ms < MAX_DEBOUNCE_MS) {
+			fg_dbg(chip, FG_STATUS, "skip, gaps_ms:%llu\n", elapsed_ms);
+			return 0;
+		}
+		last_update_time = ktime_get();
+
+		if (chip->charge_done) {
+			rc = fg_get_battery_temp(chip, &batt_temp);
+			if (rc < 0) {
+				pr_err("Error in getting batt_temp\n");
+				return 0;
+			}
+
+			curr_fv_limited = fg_check_fv_limited(chip);
+
+			rc = fg_get_msoc(chip, &msoc);
+			if (rc < 0) {
+				pr_err("Error in getting msoc, rc=%d\n",
+					rc);
+				return rc;
+			}
+			fg_dbg(chip, FG_STATUS, "cfl:%d, bt:%d, msoc:%d\n", 
+					curr_fv_limited, batt_temp, msoc);
+
+			if (!chip->recharge_soc_adjusted) {
+				new_recharge_soc = msoc - (FULL_CAPACITY -
+								recharge_soc);
+				chip->recharge_soc_adjusted = true;
+			} else {
+				if ((fv_limited && !curr_fv_limited)
+					|| (!curr_fv_limited 
+						&& (batt_temp <= FORCE_RESTORE_TEMP)
+						&& (msoc != FULL_CAPACITY))) {
+					new_recharge_soc = recharge_soc;
+					chip->recharge_soc_adjusted = false;
+					fv_limited = false;
+				} else {
+					fv_limited = curr_fv_limited;
+					return 0;
+				}
+			}
+		} else {
+			return 0;
+		}
+	} else {
+		if (chip->recharge_soc_adjusted) {
+			new_recharge_soc = recharge_soc;
+			chip->recharge_soc_adjusted = false;
+		} else {
+			return 0;
+		}
+	}
+
+	rc = fg_set_recharge_soc(chip, new_recharge_soc);
+	if (rc < 0) {
+		chip->recharge_soc_adjusted = recharge_soc_status;
+		pr_err("Couldn't set resume SOC for FG, rc=%d\n", rc);
+		return rc;
+	}
+
+	fg_dbg(chip, FG_STATUS, "<== final recharge soc set to %d\n", 
+			new_recharge_soc);
+
+	return 0;
+}
+#else
 static int fg_adjust_recharge_soc(struct fg_chip *chip)
 {
 	int rc, msoc, recharge_soc, new_recharge_soc = 0;
@@ -1980,6 +2132,7 @@ static int fg_adjust_recharge_soc(struct fg_chip *chip)
 	fg_dbg(chip, FG_STATUS, "resume soc set to %d\n", new_recharge_soc);
 	return 0;
 }
+#endif
 
 static int fg_adjust_recharge_voltage(struct fg_chip *chip)
 {
@@ -2423,6 +2576,57 @@ static int fg_get_cycle_count(struct fg_chip *chip)
 	return count;
 }
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+#define MIN_ICL_UA   (500000)
+#define MAX_CNT      (5)
+static void fg_usb_icl_check_wa(struct fg_chip *chip)
+{
+	static u32 cnt = 0;
+	union power_supply_propval temp_prop = {0};
+	int rc;
+
+	if (usb_psy_initialized(chip) &&
+		(chip->charge_status == POWER_SUPPLY_STATUS_CHARGING) && 
+		((chip->health == POWER_SUPPLY_HEALTH_GOOD) || 
+		 (chip->health == POWER_SUPPLY_HEALTH_WARM) || 
+		 (chip->health == POWER_SUPPLY_HEALTH_COOL))) {
+		rc = power_supply_get_property(chip->usb_psy,
+				POWER_SUPPLY_PROP_INPUT_CURRENT_MAX, &temp_prop);
+		if (rc < 0 || temp_prop.intval < MIN_ICL_UA) {
+			pr_err("Error: max icl(%d), rc=%d\n", 
+					temp_prop.intval, rc);
+			cnt = 0;  /* clear the counter */
+			return;
+		}
+
+		rc = power_supply_get_property(chip->usb_psy,
+				POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED, &temp_prop);
+		if (rc < 0) {
+			pr_err("Error: getting settled icl, rc=%d\n", rc);
+			cnt = 0;  /* clear the counter */
+			return;
+		}
+		if (temp_prop.intval < MIN_ICL_UA) {
+			if (++cnt % MAX_CNT == 0) {
+				pr_err("FG force to rerun aicl(%d)...\n", temp_prop.intval);
+				temp_prop.intval = 1;
+				rc = power_supply_set_property(chip->batt_psy,
+								POWER_SUPPLY_PROP_RERUN_AICL, &temp_prop);
+				if (rc < 0) {
+					pr_err("Error in setting rerun_aicl property on batt_psy, rc=%d\n",
+						rc);
+					cnt = 0;  /* clear the counter */
+				}
+			}
+		} else {
+			cnt = 0;  /* clear the counter */
+		}
+    } else {
+		cnt = 0;  /* clear the counter */
+    }
+}
+#endif
+
 static void status_change_work(struct work_struct *work)
 {
 	struct fg_chip *chip = container_of(work,
@@ -2495,7 +2699,16 @@ static void status_change_work(struct work_struct *work)
 				rc);
 	}
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if(0)
+		fg_ttf_update(chip);
+#else
 	fg_ttf_update(chip);
+#endif
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	fg_usb_icl_check_wa(chip);
+#endif
 
 out:
 	fg_dbg(chip, FG_POWER_SUPPLY, "charge_status:%d charge_type:%d charge_done:%d\n",
@@ -2601,6 +2814,7 @@ static bool is_profile_load_required(struct fg_chip *chip)
 	return true;
 }
 
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 static void clear_battery_profile(struct fg_chip *chip)
 {
 	u8 val = 0;
@@ -2611,6 +2825,7 @@ static void clear_battery_profile(struct fg_chip *chip)
 	if (rc < 0)
 		pr_err("failed to write profile integrity rc=%d\n", rc);
 }
+#endif
 
 #define SOC_READY_WAIT_MS		2000
 static int __fg_restart(struct fg_chip *chip)
@@ -2681,8 +2896,15 @@ static void profile_load_work(struct work_struct *work)
 		goto out;
 	}
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (!chip->profile_available) {
+		pr_err("Error: profile not available.\n");
+		goto out;
+	}
+#else
 	if (!chip->profile_available)
 		goto out;
+#endif
 
 	if (!is_profile_load_required(chip))
 		goto done;
@@ -3435,16 +3657,34 @@ static int fg_psy_get_property(struct power_supply *psy,
 		rc = fg_get_charge_counter(chip, &pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG:
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		if(1)
+			pval->intval = -ENODATA;
+		else
+			rc = fg_get_time_to_full(chip, &pval->intval);
+#else
 		rc = fg_get_time_to_full(chip, &pval->intval);
+#endif
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG:
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		if(1)
+			pval->intval = -ENODATA;
+		else
+			rc = fg_get_time_to_empty(chip, &pval->intval);
+#else
 		rc = fg_get_time_to_empty(chip, &pval->intval);
+#endif
 		break;
 	case POWER_SUPPLY_PROP_SOC_REPORTING_READY:
 		pval->intval = chip->soc_reporting_ready;
 		break;
 	case POWER_SUPPLY_PROP_DEBUG_BATTERY:
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		pval->intval = 0;
+#else
 		pval->intval = is_debug_batt_id(chip);
+#endif
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
 		rc = fg_get_sram_prop(chip, FG_SRAM_VBATT_FULL, &pval->intval);
@@ -3873,6 +4113,7 @@ static int fg_hw_init(struct fg_chip *chip)
 		return rc;
 	}
 
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 	if (is_debug_batt_id(chip)) {
 		val = ESR_NO_PULL_DOWN;
 		rc = fg_masked_write(chip, BATT_INFO_ESR_PULL_DN_CFG(chip),
@@ -3882,6 +4123,18 @@ static int fg_hw_init(struct fg_chip *chip)
 			return rc;
 		}
 	}
+#endif
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	fg_encode(chip->sp, FG_SRAM_SLOPE_LIMIT, 3, &val);
+	rc = fg_sram_write(chip, chip->sp[FG_SRAM_SLOPE_LIMIT].addr_word,
+			chip->sp[FG_SRAM_SLOPE_LIMIT].addr_byte, &val,
+			chip->sp[FG_SRAM_SLOPE_LIMIT].len, FG_IMA_DEFAULT);
+	if (rc < 0) {
+		pr_err("Error in configuring slope_limit coefficient, rc=%d\n",
+			rc);
+	}
+#endif
 
 	return 0;
 }
@@ -3988,7 +4241,10 @@ static irqreturn_t fg_batt_missing_irq_handler(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 	clear_battery_profile(chip);
+#endif
+
 	schedule_delayed_work(&chip->profile_load_work, 0);
 
 	if (chip->fg_psy)
@@ -4031,6 +4287,12 @@ static irqreturn_t fg_delta_batt_temp_irq_handler(int irq, void *data)
 		&prop);
 	chip->health = prop.intval;
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (abs(chip->last_batt_temp - batt_temp) > 30)
+		pr_warn("Battery temperature last:%d current: %d\n",
+			chip->last_batt_temp, batt_temp);
+#endif
+
 	if (chip->last_batt_temp != batt_temp) {
 		rc = fg_adjust_timebase(chip);
 		if (rc < 0)
@@ -4043,11 +4305,19 @@ static irqreturn_t fg_delta_batt_temp_irq_handler(int irq, void *data)
 
 		chip->last_batt_temp = batt_temp;
 		power_supply_changed(chip->batt_psy);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		if (chip->fg_psy)
+			power_supply_changed(chip->fg_psy);
+#endif
 	}
 
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 	if (abs(chip->last_batt_temp - batt_temp) > 30)
 		pr_warn("Battery temperature last:%d current: %d\n",
 			chip->last_batt_temp, batt_temp);
+#endif
+
 	return IRQ_HANDLED;
 }
 
@@ -4674,7 +4944,11 @@ static int fg_parse_dt(struct fg_chip *chip)
 	rc = of_property_read_u32(node, "qcom,fg-batt-temp-delta", &temp);
 	if (rc < 0)
 		chip->dt.batt_temp_delta = -EINVAL;
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	else if (temp >= BTEMP_DELTA_LOW && temp <= BTEMP_DELTA_HIGH)
+#else
 	else if (temp > BTEMP_DELTA_LOW && temp <= BTEMP_DELTA_HIGH)
+#endif
 		chip->dt.batt_temp_delta = temp;
 
 	chip->dt.hold_soc_while_full = of_property_read_bool(node,
@@ -4874,6 +5148,20 @@ static int fg_gen3_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	{
+		#define RETRY_MAX_COUNT (10)
+		u32 cnt=0;
+		do {
+			volt_uv = 0;
+			fg_get_battery_voltage(chip, &volt_uv);
+			if(volt_uv) break;
+			cnt++;
+			msleep(200);
+		} while(cnt < RETRY_MAX_COUNT);
+	}
+#endif
+
 	rc = fg_hw_init(chip);
 	if (rc < 0) {
 		dev_err(chip->dev, "Error in initializing FG hardware, rc:%d\n",
@@ -4948,6 +5236,9 @@ static int fg_gen3_probe(struct platform_device *pdev)
 	pr_debug("FG GEN3 driver probed successfully\n");
 	return 0;
 exit:
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	pr_err("FG GEN3 driver probed failed, rc=%d\n", rc);
+#endif
 	fg_cleanup(chip);
 	return rc;
 }
@@ -4961,7 +5252,10 @@ static int fg_gen3_suspend(struct device *dev)
 	if (rc < 0)
 		pr_err("Error in configuring ESR timer, rc=%d\n", rc);
 
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 	cancel_delayed_work_sync(&chip->ttf_work);
+#endif
+
 	if (fg_sram_dump)
 		cancel_delayed_work_sync(&chip->sram_dump_work);
 	return 0;
@@ -4976,7 +5270,10 @@ static int fg_gen3_resume(struct device *dev)
 	if (rc < 0)
 		pr_err("Error in configuring ESR timer, rc=%d\n", rc);
 
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 	schedule_delayed_work(&chip->ttf_work, 0);
+#endif
+
 	if (fg_sram_dump)
 		schedule_delayed_work(&chip->sram_dump_work,
 				msecs_to_jiffies(fg_sram_dump_period_ms));
@@ -5017,6 +5314,11 @@ static void fg_gen3_shutdown(struct platform_device *pdev)
 			return;
 		}
 	}
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	pr_emerg("FG shutdown done! \n");
+#endif
+
 }
 
 static const struct of_device_id fg_gen3_match_table[] = {

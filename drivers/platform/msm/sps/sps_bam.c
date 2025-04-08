@@ -1,3 +1,4 @@
+
 /* Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -2348,6 +2349,11 @@ int sps_bam_get_free_count(struct sps_bam *dev, u32 pipe_index,
  */
 int sps_bam_set_satellite(struct sps_bam *dev, u32 pipe_index)
 {
+/* MODIFIED-BEGIN by zhangxianzhu, 2017-09-12,task-5323490,solution-5071846*/
+#ifdef CONFIG_BBRY
+	unsigned long flags = 0;
+#endif
+/* MODIFIED-END by zhangxianzhu,task-5323490,solution-5071846*/
 	struct sps_pipe *pipe = dev->pipes[pipe_index];
 
 	/*
@@ -2390,10 +2396,18 @@ int sps_bam_set_satellite(struct sps_bam *dev, u32 pipe_index)
 	}
 
 	/* Indicate satellite control */
+/* MODIFIED-BEGIN by zhangxianzhu, 2017-09-12,task-5323490,solution-5071846*/
+#ifdef CONFIG_BBRY
+	spin_lock_irqsave(&dev->isr_lock, flags);
+#endif
 	list_del(&pipe->list);
 	dev->pipe_active_mask &= ~(1UL << pipe_index);
 	dev->pipe_remote_mask |= pipe->pipe_index_mask;
 	pipe->state |= BAM_STATE_REMOTE;
+#ifdef CONFIG_BBRY
+	spin_unlock_irqrestore(&dev->isr_lock, flags);
+#endif
+/* MODIFIED-END by zhangxianzhu,task-5323490,solution-5071846*/
 
 	return 0;
 }

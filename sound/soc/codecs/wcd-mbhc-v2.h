@@ -270,6 +270,10 @@ struct wcd_mbhc_config {
 	bool detect_extn_cable;
 	bool mono_stero_detection;
 	bool (*swap_gnd_mic)(struct snd_soc_codec *codec);
+#ifdef CONFIG_TCT_SDM660_COMMON
+	bool (*swap_gnd_mic_reset)(struct snd_soc_codec *codec); // MODIFIED by hongwei.tian, 2017-12-13,BUG-5760547
+	bool (*swap_hph_switch_reset)(struct snd_soc_codec *codec , bool status);
+#endif
 	bool hs_ext_micbias;
 	bool gnd_det_en;
 	int key_code[WCD_MBHC_KEYCODE_NUM];
@@ -280,6 +284,7 @@ struct wcd_mbhc_config {
 	bool enable_anc_mic_detect;
 	u32 enable_usbc_analog;
 	struct usbc_ana_audio_config usbc_analog_cfg;
+	int (*codec_hph_switch_cb)(struct snd_soc_codec *, int); // MODIFIED by hongwei.tian, 2018-01-08,BUG-5860103
 };
 
 struct wcd_mbhc_intr {
@@ -394,6 +399,12 @@ struct wcd_mbhc_cb {
 	void (*update_anc_state)(struct snd_soc_codec *codec,
 				 bool enable, int anc_num);
 	bool (*is_anc_on)(struct wcd_mbhc *mbhc);
+/* MODIFIED-BEGIN by hongwei.tian, 2018-05-14,BUG-6312386*/
+#if defined(CONFIG_TCT_SDM636_LUNA)
+	bool (*is_hphr_spk_on)(struct wcd_mbhc *mbhc);
+#endif
+/* MODIFIED-END by hongwei.tian,BUG-6312386*/
+
 };
 
 struct wcd_mbhc {
@@ -470,6 +481,9 @@ struct wcd_mbhc {
 	struct notifier_block psy_nb;
 	struct power_supply *usb_psy;
 	struct work_struct usbc_analog_work;
+#ifdef CONFIG_TCT_SDM660_COMMON
+	bool is_selfie_stick_insert; // MODIFIED by hongwei.tian, 2017-12-13,BUG-5760547
+#endif
 	bool force_linein;
 };
 #define WCD_MBHC_CAL_SIZE(buttons, rload) ( \

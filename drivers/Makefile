@@ -95,6 +95,13 @@ obj-$(CONFIG_ATA_OVER_ETH)	+= block/aoe/
 obj-$(CONFIG_PARIDE) 		+= block/paride/
 obj-$(CONFIG_TC)		+= tc/
 obj-$(CONFIG_UWB)		+= uwb/
+
+ifdef CONFIG_TCT_SDM660_COMMON
+obj-$(CONFIG_OF)		+= of/
+obj-$(CONFIG_EXTCON)		+= extcon/
+obj-$(CONFIG_IIO)		+= iio/
+endif
+
 obj-$(CONFIG_USB_PHY)		+= usb/
 obj-$(CONFIG_USB)		+= usb/
 obj-$(CONFIG_PCI)		+= usb/
@@ -136,7 +143,11 @@ endif
 obj-$(CONFIG_DCA)		+= dca/
 obj-$(CONFIG_HID)		+= hid/
 obj-$(CONFIG_PPC_PS3)		+= ps3/
+
+ifndef CONFIG_TCT_SDM660_COMMON
 obj-$(CONFIG_OF)		+= of/
+endif
+
 obj-$(CONFIG_SSB)		+= ssb/
 obj-$(CONFIG_BCMA)		+= bcma/
 obj-$(CONFIG_VHOST_RING)	+= vhost/
@@ -159,9 +170,17 @@ obj-$(CONFIG_VIRT_DRIVERS)	+= virt/
 obj-$(CONFIG_HYPERV)		+= hv/
 
 obj-$(CONFIG_PM_DEVFREQ)	+= devfreq/
+
+ifndef CONFIG_TCT_SDM660_COMMON
 obj-$(CONFIG_EXTCON)		+= extcon/
+endif
+
 obj-$(CONFIG_MEMORY)		+= memory/
+
+ifndef CONFIG_TCT_SDM660_COMMON
 obj-$(CONFIG_IIO)		+= iio/
+endif
+
 obj-$(CONFIG_VME_BUS)		+= vme/
 obj-$(CONFIG_IPACK_BUS)		+= ipack/
 obj-$(CONFIG_NTB)		+= ntb/
@@ -182,3 +201,7 @@ obj-$(CONFIG_BIF)		+= bif/
 
 obj-$(CONFIG_SENSORS_SSC)	+= sensors/
 obj-$(CONFIG_ESOC)              += esoc/
+
+#start: BBSECURE_BIDE
+obj-$(CONFIG_BBSECURE_BIDE)		+= bide/
+#end: BBSECURE_BIDE

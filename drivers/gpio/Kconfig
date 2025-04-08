@@ -1059,4 +1059,11 @@ config GPIO_VIPERBOARD
 
 endmenu
 
+#start:BBRY_ANDROID
+config GPIO_NPI_DOWN_STATUS
+         tristate "NPI Down status"
+         help
+           Say 'y' here to include debug support for the Qualcomm
+           QPNP gpio status.
+#end:BBRY_ANDROID
 endif

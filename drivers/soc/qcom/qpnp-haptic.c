@@ -1902,7 +1902,7 @@ static int qpnp_hap_auto_res_enable(struct qpnp_hap *hap, int enable)
 	if (!hap->correct_lra_drive_freq && !auto_res_mode_qwd) {
 		pr_debug("correct_lra_drive_freq: %d auto_res_mode_qwd: %d\n",
 			hap->correct_lra_drive_freq, auto_res_mode_qwd);
-		return 0;
+		//return 0;  //Modified by wu qifeng, to force enable auto_res // MODIFIED by qifeng.wu, 2018-02-07,BUG-5968317
 	}
 
 	val = enable ? AUTO_RES_ENABLE : 0;
@@ -2247,8 +2247,14 @@ static void qpnp_hap_td_enable(struct timed_output_dev *dev, int time_ms)
 		return;
 	}
 
+/* MODIFIED-BEGIN by qifeng.wu, 2017-12-08,BUG-5711757*/
+#ifdef CONFIG_TCT_SDM660_COMMON
+	if (time_ms < 5)
+		time_ms = 5;
+#else
 	if (time_ms < 10)
 		time_ms = 10;
+#endif
 
 	if (is_sw_lra_auto_resonance_control(hap))
 		hrtimer_cancel(&hap->auto_res_err_poll_timer);

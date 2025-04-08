@@ -305,9 +305,13 @@ static void pack_rsp_and_send(unsigned char *buf, int len,
 		 */
 		if (driver->logging_mode == DIAG_MEMORY_DEVICE_MODE ||
 				driver->logging_mode == DIAG_MULTI_MODE) {
+			/* MODIFIED-BEGIN by Wu Yan, 2018-06-01,BUG-6362777*/
+			mutex_lock(&driver->diagchar_mutex);
 			mutex_lock(&driver->md_session_lock);
 			chk_logging_wakeup();
 			mutex_unlock(&driver->md_session_lock);
+			mutex_unlock(&driver->diagchar_mutex);
+			/* MODIFIED-END by Wu Yan,BUG-6362777*/
 		}
 	}
 	if (driver->rsp_buf_busy) {
@@ -398,9 +402,13 @@ static void encode_rsp_and_send(unsigned char *buf, int len,
 		 */
 		if (driver->logging_mode == DIAG_MEMORY_DEVICE_MODE ||
 				driver->logging_mode == DIAG_MULTI_MODE) {
+			/* MODIFIED-BEGIN by Wu Yan, 2018-06-01,BUG-6362777*/
+			mutex_lock(&driver->diagchar_mutex);
 			mutex_lock(&driver->md_session_lock);
 			chk_logging_wakeup();
 			mutex_unlock(&driver->md_session_lock);
+			mutex_unlock(&driver->diagchar_mutex);
+			/* MODIFIED-END by Wu Yan,BUG-6362777*/
 		}
 	}
 
@@ -501,7 +509,10 @@ void diag_update_userspace_clients(unsigned int type)
 
 	mutex_lock(&driver->diagchar_mutex);
 	for (i = 0; i < driver->num_clients; i++)
-		if (driver->client_map[i].pid != 0) {
+		/* MODIFIED-BEGIN by Wu Yan, 2018-06-01,BUG-6362777*/
+		if (driver->client_map[i].pid != 0 &&
+		    type != (driver->data_ready[i] & type)) {
+		    /* MODIFIED-END by Wu Yan,BUG-6362777*/
 			driver->data_ready[i] |= type;
 			atomic_inc(&driver->data_ready_notif[i]);
 		}
@@ -521,9 +532,13 @@ void diag_update_md_clients(unsigned int type)
 				if (driver->client_map[j].pid != 0 &&
 					driver->client_map[j].pid ==
 					driver->md_session_map[i]->pid) {
-					driver->data_ready[j] |= type;
-					atomic_inc(
-						&driver->data_ready_notif[j]);
+					/* MODIFIED-BEGIN by Wu Yan, 2018-06-01,BUG-6362777*/
+					if (type != (driver->data_ready[j] & type)) {
+						driver->data_ready[j] |= type;
+						atomic_inc(
+							&driver->data_ready_notif[j]);
+					}
+					/* MODIFIED-END by Wu Yan,BUG-6362777*/
 					break;
 				}
 			}
@@ -539,8 +554,12 @@ void diag_update_sleeping_process(int process_id, int data_type)
 	mutex_lock(&driver->diagchar_mutex);
 	for (i = 0; i < driver->num_clients; i++)
 		if (driver->client_map[i].pid == process_id) {
-			driver->data_ready[i] |= data_type;
-			atomic_inc(&driver->data_ready_notif[i]);
+			/* MODIFIED-BEGIN by Wu Yan, 2018-06-01,BUG-6362777*/
+			if (data_type != (driver->data_ready[i] & data_type)) {
+				driver->data_ready[i] |= data_type;
+				atomic_inc(&driver->data_ready_notif[i]);
+			}
+			/* MODIFIED-END by Wu Yan,BUG-6362777*/
 			break;
 		}
 	wake_up_interruptible(&driver->wait_q);
@@ -1055,9 +1074,11 @@ int diag_process_apps_pkt(unsigned char *buf, int len, int pid)
 		diag_send_rsp(driver->apps_rsp_buf, 1, pid);
 		msleep(5000);
 		/* call download API */
-		msm_set_restart_mode(RESTART_DLOAD);
+		/* MODIFIED-BEGIN by guobing.miao, 2017-09-15,BUG-5326437*/
+		//msm_set_restart_mode(RESTART_DLOAD);
 		printk(KERN_CRIT "diag: download mode set, Rebooting SoC..\n");
-		kernel_restart(NULL);
+		kernel_restart("edl");
+		/* MODIFIED-END by guobing.miao,BUG-5326437*/
 		/* Not required, represents that command isnt sent to modem */
 		return 0;
 	}

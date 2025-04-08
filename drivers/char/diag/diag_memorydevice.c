@@ -198,17 +198,23 @@ int diag_md_write(int id, unsigned char *buf, int len, int ctx)
 	}
 
 	found = 0;
+	/* MODIFIED-BEGIN by Wu Yan, 2018-06-01,BUG-6362777*/
+	mutex_lock(&driver->diagchar_mutex);
 	for (i = 0; i < driver->num_clients && !found; i++) {
 		if ((driver->client_map[i].pid != pid) ||
 		    (driver->client_map[i].pid == 0))
 			continue;
 
 		found = 1;
+		if (driver->data_ready[i] & USER_SPACE_DATA_TYPE)
+			continue;
 		driver->data_ready[i] |= USER_SPACE_DATA_TYPE;
 		atomic_inc(&driver->data_ready_notif[i]);
 		pr_debug("diag: wake up logging process\n");
 		wake_up_interruptible(&driver->wait_q);
 	}
+	mutex_unlock(&driver->diagchar_mutex);
+	/* MODIFIED-END by Wu Yan,BUG-6362777*/
 
 	if (!found)
 		return -EINVAL;

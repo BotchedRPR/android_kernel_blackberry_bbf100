@@ -279,9 +279,12 @@ int snd_timer_open(struct snd_timer_instance **ti,
 		return -ENODEV;
 	}
 	if (!list_empty(&timer->open_list_head)) {
-		timeri = list_entry(timer->open_list_head.next,
+		/* MODIFIED-BEGIN by hongwei.tian, 2020-03-18,BUG-8983159*/
+		struct snd_timer_instance *t =
+			list_entry(timer->open_list_head.next,
 				    struct snd_timer_instance, open_list);
-		if (timeri->flags & SNDRV_TIMER_IFLG_EXCLUSIVE) {
+		if (t->flags & SNDRV_TIMER_IFLG_EXCLUSIVE) {
+		/* MODIFIED-END by hongwei.tian,BUG-8983159*/
 			mutex_unlock(&register_mutex);
 			return -EBUSY;
 		}

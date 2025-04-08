@@ -68,14 +68,23 @@ static int sockev_client_cb(struct notifier_block *nb,
 	struct nlmsghdr *nlh;
 	struct sknlsockevmsg *smsg;
 	struct socket *sock;
+	/* MODIFIED-BEGIN by tongyuan.lv, 2020-06-06,BUG-9497177*/
+	struct sock *sk;
 
 	sock = (struct socket *)data;
-	if (socknlmsgsk == 0)
-		goto done;
-	if ((socknlmsgsk == NULL) || (sock == NULL) || (sock->sk == NULL))
-		goto done;
+	if (!socknlmsgsk || !sock)
+		/* MODIFIED-BEGIN by na.long, 2021-03-27,BUG-10967058*/
+		goto sk_null;
 
-	if (sock->sk->sk_family != AF_INET && sock->sk->sk_family != AF_INET6)
+	sk = sock->sk;
+	if (!sk)
+		goto sk_null;
+
+	sock_hold(sk);
+	/* MODIFIED-END by na.long,BUG-10967058*/
+
+	if (sk->sk_family != AF_INET && sk->sk_family != AF_INET6)
+	/* MODIFIED-END by tongyuan.lv,BUG-9497177*/
 		goto done;
 
 	if (event != SOCKEV_BIND && event != SOCKEV_LISTEN)
@@ -96,14 +105,19 @@ static int sockev_client_cb(struct notifier_block *nb,
 	smsg = nlmsg_data(nlh);
 	smsg->pid = current->pid;
 	_sockev_event(event, smsg->event, sizeof(smsg->event));
-	smsg->skfamily = sock->sk->sk_family;
-	smsg->skstate = sock->sk->sk_state;
-	smsg->skprotocol = sock->sk->sk_protocol;
-	smsg->sktype = sock->sk->sk_type;
-	smsg->skflags = sock->sk->sk_flags;
-
+	/* MODIFIED-BEGIN by tongyuan.lv, 2020-06-06,BUG-9497177*/
+	smsg->skfamily = sk->sk_family;
+	smsg->skstate = sk->sk_state;
+	smsg->skprotocol = sk->sk_protocol;
+	smsg->sktype = sk->sk_type;
+	smsg->skflags = sk->sk_flags;
+	/* MODIFIED-END by tongyuan.lv,BUG-9497177*/
 	nlmsg_notify(socknlmsgsk, skb, 0, SKNLGRP_SOCKEV, 0, GFP_KERNEL);
 done:
+	/* MODIFIED-BEGIN by na.long, 2021-03-27,BUG-10967058*/
+	sock_put(sk);
+sk_null:
+/* MODIFIED-END by na.long,BUG-10967058*/
 	return 0;
 }
 

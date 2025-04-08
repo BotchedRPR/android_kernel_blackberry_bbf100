@@ -1137,5 +1137,10 @@ static struct platform_driver qusb_phy_driver = {
 
 module_platform_driver(qusb_phy_driver);
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+MODULE_DESCRIPTION("MSM QUSB2 PHY v2 driver for msm8998");
+#else
 MODULE_DESCRIPTION("MSM QUSB2 PHY v2 driver");
+#endif
+
 MODULE_LICENSE("GPL v2");

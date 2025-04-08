@@ -554,6 +554,10 @@ struct msm_flash_cfg_data_t {
 	enum msm_flash_cfg_type_t cfg_type;
 	int32_t flash_current[MAX_LED_TRIGGERS];
 	int32_t flash_duration[MAX_LED_TRIGGERS];
+#ifdef CONFIG_BBRY
+	int32_t flash_mitigation_level;
+	int32_t torch_mitigation_level;
+#endif /* CONFIG_BBRY */
 	union {
 		struct msm_flash_init_info_t *flash_init_info;
 		struct msm_camera_i2c_reg_setting_array *settings;

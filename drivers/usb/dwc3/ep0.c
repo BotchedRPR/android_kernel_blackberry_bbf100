@@ -38,7 +38,12 @@
 #include "debug.h"
 
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+static bool enable_dwc3_u1u2 = 1;
+#else
 static bool enable_dwc3_u1u2;
+#endif
+
 module_param(enable_dwc3_u1u2, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(enable_dwc3_u1u2, "Enable support for U1U2 low power modes");
 
@@ -415,9 +420,7 @@ static int dwc3_ep0_handle_status(struct dwc3 *dwc,
 		 */
 
 		ret = dwc3_ep0_delegate_req(dwc, ctrl);
-		if (ret)
-			return ret;
-		break;
+		return ret;
 
 	case USB_RECIP_ENDPOINT:
 		dep = dwc3_wIndex_to_dep(dwc, ctrl->wIndex);

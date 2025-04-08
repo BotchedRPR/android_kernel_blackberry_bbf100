@@ -20,5 +20,9 @@
 void msm_set_restart_mode(int mode);
 extern int pmic_reset_irq;
 
+#ifdef CONFIG_BBRY
+#include <linux/input/qpnp-power-on.h>
+enum pon_power_off_type pwr_off_default_type(void);
+#endif
 #endif
 

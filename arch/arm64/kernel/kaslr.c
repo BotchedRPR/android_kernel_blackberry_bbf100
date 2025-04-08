@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2017 BlackBerry Limited
  * Copyright (C) 2016 Linaro Ltd <ard.biesheuvel@linaro.org>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,9 +21,17 @@
 #include <asm/pgtable.h>
 #include <asm/sections.h>
 
-u64 __read_mostly module_alloc_base;
+#ifdef CONFIG_BBRY
+extern u64 __cacheline_aligned boot_args[4];
+#endif
+
+/*
+ * This comes from the patch commit '5a9e3e1' on linux kernel
+ */
+u64 __ro_after_init module_alloc_base;
 u16 __initdata memstart_offset_seed;
 
+#ifndef CONFIG_BBRY
 static __init u64 get_kaslr_seed(void *fdt)
 {
 	int node, len;
@@ -41,6 +50,7 @@ static __init u64 get_kaslr_seed(void *fdt)
 	*prop = 0;
 	return ret;
 }
+#endif
 
 static __init const u8 *get_cmdline(void *fdt)
 {
@@ -74,7 +84,7 @@ extern void *__init __fixmap_remap_fdt(phys_addr_t dt_phys, int *size,
  * containing function pointers) to be reinitialized, and zero-initialized
  * .bss variables will be reset to 0.
  */
-u64 __init kaslr_early_init(u64 dt_phys, u64 modulo_offset)
+u64 __init kaslr_early_init(u64 dt_phys)
 {
 	void *fdt;
 	u64 seed, offset, mask, module_range;
@@ -96,11 +106,19 @@ u64 __init kaslr_early_init(u64 dt_phys, u64 modulo_offset)
 	fdt = __fixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL);
 	if (!fdt)
 		return 0;
+#ifdef CONFIG_BBRY
+	/* Clear the memstart seed in case we won't achieve KASLR below */
+	memstart_offset_seed = 0;
+	/* BlackBerry bootrom provides a 64bit random seed in the x1 register */
+	seed = boot_args[1];
+	boot_args[1] = 0; /* clear to comply with the boot protocol */
+#else
 
 	/*
 	 * Retrieve (and wipe) the seed from the FDT
 	 */
 	seed = get_kaslr_seed(fdt);
+#endif
 	if (!seed)
 		return 0;
 
@@ -130,15 +148,17 @@ u64 __init kaslr_early_init(u64 dt_phys, u64 modulo_offset)
 	/*
 	 * The kernel Image should not extend across a 1GB/32MB/512MB alignment
 	 * boundary (for 4KB/16KB/64KB granule kernels, respectively). If this
-	 * happens, increase the KASLR offset by the size of the kernel image
-	 * rounded up by SWAPPER_BLOCK_SIZE.
+	 * happens, round down the KASLR offset by (1 << SWAPPER_TABLE_SHIFT).
+	 *
+	 * NOTE: The references to _text and _end below will already take the
+	 *       modulo offset (the physical displacement modulo 2 MB) into
+	 *       account, given that the physical placement is controlled by
+	 *       the loader, and will not change as a result of the virtual
+	 *       mapping we choose.
 	 */
-	if ((((u64)_text + offset + modulo_offset) >> SWAPPER_TABLE_SHIFT) !=
-	    (((u64)_end + offset + modulo_offset) >> SWAPPER_TABLE_SHIFT)) {
-		u64 kimg_sz = _end - _text;
-		offset = (offset + round_up(kimg_sz, SWAPPER_BLOCK_SIZE))
-				& mask;
-	}
+	if ((((u64)_text + offset) >> SWAPPER_TABLE_SHIFT) !=
+	    (((u64)_end + offset) >> SWAPPER_TABLE_SHIFT))
+		offset = round_down(offset, 1 << SWAPPER_TABLE_SHIFT);
 
 	if (IS_ENABLED(CONFIG_KASAN))
 		/*

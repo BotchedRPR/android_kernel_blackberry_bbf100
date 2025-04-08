@@ -31,6 +31,10 @@
 
 #include <linux/configfs.h>
 
+#ifdef CONFIG_BBSECURE_SDBASE
+#include "bbry_policy.h"
+#endif /* CONFIG_BBSECURE_SDBASE */
+
 struct hashtable_entry {
 	struct hlist_node hlist;
 	struct hlist_node dlist; /* for deletion cleanup */
@@ -44,6 +48,16 @@ static DEFINE_HASHTABLE(ext_to_groupid, 8);
 
 
 static struct kmem_cache *hashtable_entry_cachep;
+
+#ifdef CONFIG_SDCARD_FS_LOCKER
+#define LOCKER_MAX_WL 10
+static const char *s_locker_wl[LOCKER_MAX_WL];
+static const char *s_locker_wl_internal[] = {
+	"com.android.cts.externalstorageapp",
+	"com.android.cts.storagestatsapp",
+	NULL
+};
+#endif /* CONFIG_SDCARD_FS_LOCKER */
 
 static unsigned int full_name_case_hash(const unsigned char *name, unsigned int len)
 {
@@ -145,11 +159,196 @@ appid_t is_excluded(const char *key, userid_t user)
 	return __is_excluded(&q, user);
 }
 
+#ifdef CONFIG_SDCARD_FS_LOCKER
+static int locker_check_caller_access_to_name_by_uid(struct inode *parent_node, const struct qstr *name)
+{
+	struct qstr q_Locker = QSTR_LITERAL(CONFIG_SDCARD_FS_LOCKER_NAME);
+	uid_t caller_uid;
+	appid_t appid;
+	struct sdcardfs_inode_data *parent_data;
+	int i;
+	unsigned int tmp;
+
+	if (!parent_node) {
+		return 1;
+	}
+	if (s_locker_wl[0] == NULL) {
+		return 1;
+	}
+
+	parent_data = SDCARDFS_I(parent_node)->data;
+	caller_uid = from_kuid(&init_user_ns, current_fsuid());
+	//pr_info("sdcardfs: %s: caller_uid=%d\n", __FUNCTION__, caller_uid);
+
+	if (parent_data->under_locker || ((parent_data->perm == PERM_ROOT) && qstr_case_eq(name, &q_Locker))) {
+		for (i = 0; s_locker_wl[i]; ++i) {
+			appid = get_appid(s_locker_wl[i]);
+			if (appid == 0) {
+				if (kstrtouint(s_locker_wl[i], 10, &tmp)) {
+					continue;
+				}
+				appid = tmp;
+			}
+			//pr_info("sdcardfs: %s: appid=%d\n", __FUNCTION__, appid);
+
+			if (caller_uid == multiuser_get_uid(parent_data->userid, appid)) {
+				return 1;
+			}
+		}
+		for (i = 0; s_locker_wl_internal[i]; ++i) {
+			appid = get_appid(s_locker_wl_internal[i]);
+			if (appid == 0) {
+				if (kstrtouint(s_locker_wl_internal[i], 10, &tmp)) {
+					continue;
+				}
+				appid = tmp;
+			}
+			//pr_info("sdcardfs: %s: appid=%d\n", __FUNCTION__, appid);
+
+			if (caller_uid == multiuser_get_uid(parent_data->userid, appid)) {
+				return 1;
+			}
+		}
+		return 0;
+	}
+
+	return 1;
+}
+#endif /* CONFIG_SDCARD_FS_LOCKER */
+
+#ifdef CONFIG_BBSECURE_SDBASE
+int policy_check_caller_access_to_name(struct inode *parent_node,
+		const struct qstr *name, fmode_t mode)
+{
+	struct sdcardfs_sb_info *sb;
+	struct sdcardfs_mount_options *opts;
+	userid_t caller_userid;
+	userid_t man_prof_userid = -1;
+	bool is_managed_profile = false;
+#ifndef CONFIG_BBSECURE_SDAFW
+	bool is_removable_storage = false;
+#else
+	enum storage_t is_removable_storage;
+#endif /* CONFIG_BBSECURE_SDAFW */
+
+	if (!parent_node)
+		return 1;
+
+	sb = SDCARDFS_SB(parent_node->i_sb);
+	if (!sb)
+		return 1;
+
+	/* Do not want to block emulated storage operations */
+	opts = &sb->options;
+#ifndef CONFIG_BBSECURE_SDAFW
+	is_removable_storage = opts->primary_only;
+	if (!is_removable_storage) {
+#else
+	is_removable_storage = strncmp(opts->primary_only, "sd\0", 3) == 0 ?
+		SD_STORE : strncmp(opts->primary_only, "otg\0", 4) == 0 ?
+		OTG_STORE : strlen(opts->primary_only) == 0 ?
+		EMU_STORE : INVALID_STORE;
+
+	if (is_removable_storage == INVALID_STORE) {
+		pr_info("sdcardfs: %s: primary_only flag invalid:%s\n",
+		__func__, opts->primary_only);
+
+		return 0;
+	}
+
+	if (is_removable_storage == EMU_STORE) {
+#endif /* CONFIG_BBSECURE_SDAFW */
+#ifdef CONFIG_BBSECURE_ADBAFW
+		kuid_t uid = current_fsuid();
+		if (uid.val == AID_SHELL) {
+			struct sdcardfs_sb_info *sb;
+			sb = SDCARDFS_SB(parent_node->i_sb);
+#ifdef CONFIG_BBSECURE_SDAFW
+			if (sb && (strlen(sb->options.primary_only) == 0)) {
+#elif defined(CONFIG_BBSECURE_SDBASE)
+			if (sb && !sb->options.primary_only) {
+#endif /* CONFIG_BBSECURE_SDBASE || CONFIG_BBSECURE_SDAFW */
+				char *buf = NULL;
+				char *path = NULL;
+				size_t path_length;
+				struct dentry *d;
+				d =  hlist_entry(parent_node->i_dentry.first, struct dentry, d_u.d_alias);
+				if(NULL != d) {
+					buf = kmalloc(PATH_MAX, GFP_NOWAIT);
+
+					/* deny access if we are unable to allocate the buffer */
+					if (NULL == buf)
+						return 0;
+					path = dentry_path(d, buf, PATH_MAX);
+				}
+				if (!IS_ERR_OR_NULL(path)) {
+					char slash;
+					userid_t aid;
+					path_length = strlen(path);
+					if( 1 < path_length && path_length < PATH_MAX) {
+						if( 0 < sscanf(path, "%c%d", &slash, &aid) ) {
+							if( 1 == get_adb_disabled(aid) ) {
+								//deny access
+								kfree(buf);
+								return 0;
+							}
+						}
+					}
+				}
+				if (buf != NULL)
+					kfree(buf);
+			}
+		}
+#endif /* CONFIG_BBSECURE_ADBAFW */
+		return 1;
+	}
+
+	caller_userid = from_kuid(&init_user_ns, current_fsuid()) / AID_USER_OFFSET;
+
+	if (get_managed_profile(&man_prof_userid) == 0)
+		is_managed_profile = !!(caller_userid == man_prof_userid);
+
+	if (caller_userid != 0 &&
+		(!is_managed_profile || (is_managed_profile && mode == FMODE_WRITE)))
+	{
+		return 0;
+	}
+
+#ifdef CONFIG_BBSECURE_SDAFW
+	{
+		int i;
+		userid_t policy_disabled[MAX_USERS_POLICY];
+		memset(policy_disabled, (userid_t)(-1), MAX_USERS_POLICY * sizeof(userid_t));
+		switch (is_removable_storage) {
+		case SD_STORE:
+			get_mediacard_disabled(policy_disabled, sizeof(policy_disabled));
+			break;
+		case OTG_STORE:
+			get_usbotg_disabled(policy_disabled, sizeof(policy_disabled));
+			break;
+		default:
+			return 1;
+			break;
+		}
+		for (i = 0; i < MAX_USERS_POLICY; i++) {
+			if (policy_disabled[i] == caller_userid)
+				return 0;
+		}
+	}
+#endif /* CONFIG_BBSECURE_SDAFW */
+	return 1;
+}
+#endif /* CONFIG_BBSECURE_SDBASE */
+
 /* Kernel has already enforced everything we returned through
  * derive_permissions_locked(), so this is used to lock down access
  * even further, such as enforcing that apps hold sdcard_rw.
  */
+#ifndef CONFIG_BBSECURE_SDBASE
 int check_caller_access_to_name(struct inode *parent_node, const struct qstr *name)
+#else
+int check_caller_access_to_name(struct inode *parent_node, const struct qstr *name, fmode_t mode)
+#endif /* CONFIG_BBSECURE_SDBASE */
 {
 	struct qstr q_autorun = QSTR_LITERAL("autorun.inf");
 	struct qstr q__android_secure = QSTR_LITERAL(".android_secure");
@@ -169,6 +368,18 @@ int check_caller_access_to_name(struct inode *parent_node, const struct qstr *na
 	 */
 	if (from_kuid(&init_user_ns, current_fsuid()) == 0)
 		return 1;
+
+#ifdef CONFIG_SDCARD_FS_LOCKER
+	if (locker_check_caller_access_to_name_by_uid(parent_node, name) == 0) {
+		return 0;
+	}
+#endif /* CONFIG_SDCARD_FS_LOCKER */
+
+#ifdef CONFIG_BBSECURE_SDBASE
+	if (policy_check_caller_access_to_name(parent_node, name, mode) == 0) {
+		return 0;
+	}
+#endif /* CONFIG_BBSECURE_SDBASE */
 
 	/* No extra permissions to enforce */
 	return 1;
@@ -659,6 +870,7 @@ static struct config_item *extension_details_make_item(struct config_group *grou
 		return ERR_PTR(-ENOMEM);
 	}
 	qstr_init(&extension_details->name, tmp);
+	extension_details->num = extensions_value->num;
 	ret = insert_ext_gid_entry(&extension_details->name, extensions_value->num);
 
 	if (ret) {
@@ -800,9 +1012,73 @@ static struct configfs_attribute packages_attr_packages_gid_list = {
 
 SDCARDFS_CONFIGFS_ATTR_WO(packages_, remove_userid);
 
+#ifdef CONFIG_SDCARD_FS_LOCKER
+static ssize_t packages_locker_wl_show(struct config_item *item, char *page)
+{
+	int i;
+
+	page[0] = 0;
+	for (i = 0; s_locker_wl[i]; ++i) {
+		strcat(page, s_locker_wl[i]);
+		strcat(page, ";");
+	}
+	page[strlen(page) - 1] = '\n';
+
+	return strlen(page) + 1;
+}
+
+static ssize_t packages_locker_wl_store(struct config_item *item,
+				       const char *page, size_t count)
+{
+	int i;
+	char *tmp;
+	char *wl;
+	char *pn;
+
+	tmp = (char *) kzalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!tmp) {
+		return -ENOMEM;
+	}
+
+	memset(tmp, 0, count);
+	memcpy(tmp, page, count);
+
+	//pr_info("sdcardfs: %s: count=%lu, page=%s\n", __FUNCTION__, count, page);
+
+	for (i = 0; s_locker_wl[i]; ++i) {
+		kfree(s_locker_wl[i]);
+		s_locker_wl[i] = NULL;
+	}
+
+	i = 0;
+	wl = tmp;
+	while ((i <= LOCKER_MAX_WL) && ((pn = strsep(&wl, ";")) != NULL)) {
+		if (!*pn) {
+			continue;
+		}
+		s_locker_wl[i] = kstrdup(pn, GFP_KERNEL);
+		if (s_locker_wl[i] == NULL) {
+			pr_err("sdcardfs: failed creating s_locker_wl entry\n");
+			kfree(tmp);
+			return -ENOMEM;
+		}
+		++i;
+	}
+
+	kfree(tmp);
+
+	return count;
+}
+
+SDCARDFS_CONFIGFS_ATTR(packages_, locker_wl);
+#endif /* CONFIG_SDCARD_FS_LOCKER */
+
 static struct configfs_attribute *packages_attrs[] = {
 	&packages_attr_packages_gid_list,
 	&packages_attr_remove_userid,
+#ifdef CONFIG_SDCARD_FS_LOCKER
+	&packages_attr_locker_wl,
+#endif /* CONFIG_SDCARD_FS_LOCKER */
 	NULL,
 };
 
@@ -858,6 +1134,27 @@ static void configfs_sdcardfs_exit(void)
 	configfs_unregister_subsystem(&sdcardfs_packages);
 }
 
+#ifdef CONFIG_SDCARD_FS_LOCKER
+static void locker_wl_init(void)
+{
+	int i;
+	for (i = 0; i < LOCKER_MAX_WL; ++i) {
+		s_locker_wl[i] = NULL;
+	}
+}
+
+static void locker_wl_free(void)
+{
+	int i;
+	for (i = 0; i < LOCKER_MAX_WL; ++i) {
+		if (s_locker_wl[i]) {
+			kfree(s_locker_wl[i]);
+			s_locker_wl[i] = NULL;
+		}
+	}
+}
+#endif /* CONFIG_SDCARD_FS_LOCKER */
+
 int packagelist_init(void)
 {
 	hashtable_entry_cachep =
@@ -868,6 +1165,14 @@ int packagelist_init(void)
 		return -ENOMEM;
 	}
 
+#ifdef CONFIG_SDCARD_FS_LOCKER
+	locker_wl_init();
+#endif /* CONFIG_SDCARD_FS_LOCKER */
+
+#ifdef CONFIG_BBSECURE_SDBASE
+	bbry_policy_init();
+#endif /* CONFIG_BBSECURE_SDBASE */
+
 	configfs_sdcardfs_init();
 	return 0;
 }
@@ -875,6 +1180,15 @@ int packagelist_init(void)
 void packagelist_exit(void)
 {
 	configfs_sdcardfs_exit();
+
+#ifdef CONFIG_SDCARD_FS_LOCKER
+	locker_wl_free();
+#endif /* CONFIG_SDCARD_FS_LOCKER */
+
+#ifdef CONFIG_BBSECURE_SDBASE
+	bbry_policy_exit();
+#endif /* CONFIG_BBSECURE_SDBASE */
+
 	packagelist_destroy();
 	kmem_cache_destroy(hashtable_entry_cachep);
 }

@@ -246,7 +246,7 @@ static struct {
 /**
  * icmp_global_allow - Are we allowed to send one more ICMP message ?
  *
- * Uses a token bucket to limit our ICMP messages to sysctl_icmp_msgs_per_sec.
+ * Uses a token bucket to limit our ICMP messages to ~sysctl_icmp_msgs_per_sec. // MODIFIED by na.long, 2021-03-11,BUG-10826833
  * Returns false if we reached the limit and can not send another packet.
  * Note: called with BH disabled
  */
@@ -273,7 +273,12 @@ bool icmp_global_allow(void)
 	}
 	credit = min_t(u32, icmp_global.credit + incr, sysctl_icmp_msgs_burst);
 	if (credit) {
-		credit--;
+		/* MODIFIED-BEGIN by na.long, 2021-03-11,BUG-10826833*/
+		/* We want to use a credit of one in average, but need to randomize
+		 * it for security reasons.
+		 */
+		credit = max_t(int, credit - prandom_u32_max(3), 0);
+		/* MODIFIED-END by na.long,BUG-10826833*/
 		rc = true;
 	}
 	icmp_global.credit = credit;

@@ -36,7 +36,13 @@
 	SSUSB_GADGET_VBUS_DRAW : CONFIG_USB_GADGET_VBUS_DRAW)
 
 /* disable LPM by default */
+/* MODIFIED-BEGIN by hongwei.tian, 2018-03-05,BUG-6052920*/
+#if defined(CONFIG_TCT_SDM660_COMMON)
+static bool disable_l1_for_hs = false;
+#else
 static bool disable_l1_for_hs = true;
+#endif
+/* MODIFIED-END by hongwei.tian,BUG-6052920*/
 module_param(disable_l1_for_hs, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(disable_l1_for_hs,
 	"Disable support for L1 LPM for HS devices");
@@ -742,6 +748,13 @@ static void reset_config(struct usb_composite_dev *cdev)
 	struct usb_function		*f;
 
 	DBG(cdev, "reset config\n");
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (!cdev->config) {
+		pr_err("%s:cdev->config is already NULL\n", __func__);
+		return;
+	}
+#endif
 
 	list_for_each_entry(f, &cdev->config->functions, list) {
 		if (f->disable)
@@ -1645,7 +1658,9 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 
 			cdev->desc.bMaxPacketSize0 =
 				cdev->gadget->ep0->maxpacket;
+
 			cdev->desc.bcdUSB = cpu_to_le16(0x0200);
+
 			if (gadget_is_superspeed(gadget)) {
 				if (gadget->speed >= USB_SPEED_SUPER) {
 					cdev->desc.bcdUSB = cpu_to_le16(0x0310);

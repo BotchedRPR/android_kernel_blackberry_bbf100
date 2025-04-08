@@ -21,6 +21,8 @@
  * This file is dual licensed.  It may be redistributed and/or modified
  * under the terms of the Apache 2.0 License OR version 2 of the GNU
  * General Public License.
+ *
+ * Copyright (C) 2018 BlackBerry Limited. All rights reserved.
  */
 
 #ifndef _SDCARDFS_H_
@@ -73,6 +75,10 @@
 
 #define AID_PACKAGE_INFO  1027
 
+#ifdef CONFIG_BBSECURE_ADBAFW
+#define AID_SHELL 2000 /* adb and debug shell user */
+#endif
+
 
 /*
  * Permissions are handled by our permission function.
@@ -87,31 +93,6 @@
 		(x)->i_gid = make_kgid(&init_user_ns, AID_SDCARD_RW);	\
 		(x)->i_mode = ((x)->i_mode & S_IFMT) | 0775;\
 	} while (0)
-
-/* OVERRIDE_CRED() and REVERT_CRED()
- *	OVERRIDE_CRED()
- *		backup original task->cred
- *		and modifies task->cred->fsuid/fsgid to specified value.
- *	REVERT_CRED()
- *		restore original task->cred->fsuid/fsgid.
- * These two macro should be used in pair, and OVERRIDE_CRED() should be
- * placed at the beginning of a function, right after variable declaration.
- */
-#define OVERRIDE_CRED(sdcardfs_sbi, saved_cred, info)		\
-	do {	\
-		saved_cred = override_fsids(sdcardfs_sbi, info->data);	\
-		if (!saved_cred)	\
-			return -ENOMEM;	\
-	} while (0)
-
-#define OVERRIDE_CRED_PTR(sdcardfs_sbi, saved_cred, info)	\
-	do {	\
-		saved_cred = override_fsids(sdcardfs_sbi, info->data);	\
-		if (!saved_cred)	\
-			return ERR_PTR(-ENOMEM);	\
-	} while (0)
-
-#define REVERT_CRED(saved_cred)	revert_fsids(saved_cred)
 
 /* Android 5.0 support */
 
@@ -139,6 +120,10 @@ typedef enum {
 	PERM_ANDROID_PACKAGE,
 	/* This node is "/Android/[data|media|obb]/[package]/cache" */
 	PERM_ANDROID_PACKAGE_CACHE,
+#ifdef CONFIG_SDCARD_FS_LOCKER
+	/* This node is "/Locker" */
+	PERM_LOCKER,
+#endif /* CONFIG_SDCARD_FS_LOCKER */
 } perm_t;
 
 struct sdcardfs_sb_info;
@@ -192,6 +177,9 @@ struct sdcardfs_inode_data {
 	bool under_android;
 	bool under_cache;
 	bool under_obb;
+#ifdef CONFIG_SDCARD_FS_LOCKER
+	bool under_locker;
+#endif /* CONFIG_SDCARD_FS_LOCKER */
 };
 
 /* sdcardfs inode data in memory */
@@ -201,6 +189,7 @@ struct sdcardfs_inode_info {
 	struct sdcardfs_inode_data *data;
 
 	/* top folder for ownership */
+	spinlock_t top_lock;
 	struct sdcardfs_inode_data *top_data;
 
 	struct inode vfs_inode;
@@ -219,6 +208,11 @@ struct sdcardfs_mount_options {
 	gid_t fs_low_gid;
 	userid_t fs_user_id;
 	bool multiuser;
+#ifdef CONFIG_BBSECURE_SDAFW
+	char primary_only[4];
+#elif defined(CONFIG_BBSECURE_SDBASE)
+	bool primary_only;
+#endif /* CONFIG_BBSECURE_SDBASE || CONFIG_BBSECURE_SDAFW */
 	bool gid_derivation;
 	unsigned int reserved_mb;
 };
@@ -379,7 +373,12 @@ static inline struct sdcardfs_inode_data *data_get(
 static inline struct sdcardfs_inode_data *top_data_get(
 		struct sdcardfs_inode_info *info)
 {
-	return data_get(info->top_data);
+	struct sdcardfs_inode_data *top_data;
+
+	spin_lock(&info->top_lock);
+	top_data = data_get(info->top_data);
+	spin_unlock(&info->top_lock);
+	return top_data;
 }
 
 extern void data_release(struct kref *ref);
@@ -401,15 +400,20 @@ static inline void release_own_data(struct sdcardfs_inode_info *info)
 }
 
 static inline void set_top(struct sdcardfs_inode_info *info,
-			struct sdcardfs_inode_data *top)
+			struct sdcardfs_inode_info *top_owner)
 {
-	struct sdcardfs_inode_data *old_top = info->top_data;
+	struct sdcardfs_inode_data *old_top;
+	struct sdcardfs_inode_data *new_top = NULL;
 
-	if (top)
-		data_get(top);
-	info->top_data = top;
+	if (top_owner)
+		new_top = top_data_get(top_owner);
+
+	spin_lock(&info->top_lock);
+	old_top = info->top_data;
+	info->top_data = new_top;
 	if (old_top)
 		data_put(old_top);
+	spin_unlock(&info->top_lock);
 }
 
 static inline int get_gid(struct vfsmount *mnt,
@@ -499,7 +503,12 @@ extern struct list_head sdcardfs_super_list;
 extern appid_t get_appid(const char *app_name);
 extern appid_t get_ext_gid(const char *app_name);
 extern appid_t is_excluded(const char *app_name, userid_t userid);
+#ifndef CONFIG_BBSECURE_SDBASE
 extern int check_caller_access_to_name(struct inode *parent_node, const struct qstr *name);
+#else
+extern int policy_check_caller_access_to_name(struct inode *parent_node, const struct qstr *name, fmode_t mode);
+extern int check_caller_access_to_name(struct inode *parent_node, const struct qstr *name, fmode_t mode);
+#endif /* CONFIG_BBSECURE_SDBASE */
 extern int packagelist_init(void);
 extern void packagelist_exit(void);
 
@@ -513,8 +522,7 @@ struct limit_search {
 };
 
 extern void setup_derived_state(struct inode *inode, perm_t perm,
-		userid_t userid, uid_t uid, bool under_android,
-		struct sdcardfs_inode_data *top);
+			userid_t userid, uid_t uid);
 extern void get_derived_permission(struct dentry *parent, struct dentry *dentry);
 extern void get_derived_permission_new(struct dentry *parent, struct dentry *dentry, const struct qstr *name);
 extern void fixup_perms_recursive(struct dentry *dentry, struct limit_search *limit);

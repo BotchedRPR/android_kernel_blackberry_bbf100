@@ -34,6 +34,11 @@
 #include <soc/qcom/socinfo.h>
 #include <soc/qcom/smem.h>
 #include <soc/qcom/boot_stats.h>
+/* MODIFIED-BEGIN by hongwei.tian, 2017-07-18,BUG-5074406*/
+#ifdef CONFIG_BBRY
+#include "bbry/devices_bbry.h"
+#endif /* CONFIG_BBRY */
+/* MODIFIED-END by hongwei.tian,BUG-5074406*/
 
 #define BUILD_ID_LENGTH 32
 #define SMEM_IMAGE_VERSION_BLOCKS_COUNT 32
@@ -791,11 +796,17 @@ msm_get_hw_platform(struct device *dev,
 			struct device_attribute *attr,
 			char *buf)
 {
+/* MODIFIED-BEGIN by hongwei.tian, 2017-07-18,BUG-5074406*/
+#ifdef CONFIG_BBRY
+	return snprintf(buf, PAGE_SIZE, "%-.32s\n", bbry_get_board_product());
+#else
 	uint32_t hw_type;
 	hw_type = socinfo_get_platform_type();
 
 	return snprintf(buf, PAGE_SIZE, "%-.32s\n",
 			hw_platform[hw_type]);
+#endif /* CONFIG_BBRY */
+/* MODIFIED-END by hongwei.tian,BUG-5074406*/
 }
 
 static ssize_t

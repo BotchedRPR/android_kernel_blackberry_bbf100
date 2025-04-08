@@ -1,6 +1,7 @@
 /*
  *  linux/drivers/mmc/core/sd.c
  *
+ *  Copyright (C) 2016 BlackBerry Limited
  *  Copyright (C) 2003-2004 Russell King, All Rights Reserved.
  *  SD support Copyright (C) 2004 Ian Molton, All Rights Reserved.
  *  Copyright (C) 2005-2007 Pierre Ossman, All Rights Reserved.
@@ -255,6 +256,9 @@ static int mmc_read_ssr(struct mmc_card *card)
 	for (i = 0; i < 16; i++)
 		ssr[i] = be32_to_cpu(ssr[i]);
 
+#ifdef CONFIG_TCT_SDM660_COMMON
+	card->ssr.speed_class = UNSTUFF_BITS(ssr, 440 - 384, 8);
+#endif
 	/*
 	 * UNSTUFF_BITS only works with four u32s so we have to offset the
 	 * bitfield positions accordingly.
@@ -735,7 +739,9 @@ MMC_DEV_ATTR(manfid, "0x%06x\n", card->cid.manfid);
 MMC_DEV_ATTR(name, "%s\n", card->cid.prod_name);
 MMC_DEV_ATTR(oemid, "0x%04x\n", card->cid.oemid);
 MMC_DEV_ATTR(serial, "0x%08x\n", card->cid.serial);
-
+#ifdef CONFIG_TCT_SDM660_COMMON
+MMC_DEV_ATTR(speed_class, "0x%x\n", card->ssr.speed_class);
+#endif
 
 static struct attribute *sd_std_attrs[] = {
 	&dev_attr_cid.attr,
@@ -750,6 +756,9 @@ static struct attribute *sd_std_attrs[] = {
 	&dev_attr_name.attr,
 	&dev_attr_oemid.attr,
 	&dev_attr_serial.attr,
+#ifdef CONFIG_TCT_SDM660_COMMON
+	&dev_attr_speed_class.attr,
+#endif
 	NULL,
 };
 ATTRIBUTE_GROUPS(sd_std);

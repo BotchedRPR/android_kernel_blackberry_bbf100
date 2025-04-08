@@ -1901,7 +1901,7 @@ static void i2c_msm_qup_init(struct i2c_msm_ctrl *ctrl)
 	writel_relaxed(QUP_INPUT_SERVICE_MASK | QUP_OUTPUT_SERVICE_MASK,
 					base + QUP_OPERATIONAL_MASK);
 
-	writel_relaxed(QUP_EN_VERSION_TWO_TAG, base + QUP_I2C_MASTER_CONFIG);
+	writel_relaxed(QUP_EN_VERSION_TWO_TAG|0x2, base + QUP_I2C_MASTER_CONFIG);
 
 	i2c_msm_qup_fifo_calc_size(ctrl);
 	/*

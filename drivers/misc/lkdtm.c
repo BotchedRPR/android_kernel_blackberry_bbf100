@@ -15,6 +15,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  *
+ * Copyright (C) 2017 BlackBerry Limited
  * Copyright (C) IBM Corporation, 2006
  *
  * Author: Ankita Garg <ankita@in.ibm.com>
@@ -105,6 +106,10 @@ enum ctype {
 	CT_WRITE_RO,
 	CT_WRITE_RO_AFTER_INIT,
 	CT_WRITE_KERN,
+	CT_USERCOPY_KERNEL,
+#ifdef CONFIG_PAX_REFCOUNT
+	CT_WRAP_ATOMIC,
+#endif
 };
 
 static char* cp_name[] = {
@@ -143,6 +148,10 @@ static char* cp_type[] = {
 	"WRITE_RO",
 	"WRITE_RO_AFTER_INIT",
 	"WRITE_KERN",
+	 "USERCOPY_KERNEL",
+#ifdef CONFIG_PAX_REFCOUNT
+	"WRAP_ATOMIC",
+#endif
 };
 
 static struct jprobe lkdtm;
@@ -366,6 +375,37 @@ static void execute_user_location(void *dst)
 	func();
 }
 
+static const unsigned char test_text[] = "This is a test.\n";
+
+static void do_usercopy_kernel(void)
+{
+	unsigned long user_addr;
+
+	user_addr = vm_mmap(NULL, 0, PAGE_SIZE,
+			    PROT_READ | PROT_WRITE | PROT_EXEC,
+			    MAP_ANONYMOUS | MAP_PRIVATE, 0);
+	if (user_addr >= TASK_SIZE) {
+		pr_warn("Failed to allocate user memory\n");
+		return;
+	}
+
+	pr_warn("attempting good copy_to_user from kernel rodata\n");
+	if (copy_to_user((void __user *)user_addr, test_text,
+			 sizeof(test_text))) {
+		pr_warn("copy_to_user failed unexpectedly?!\n");
+		goto free_user;
+	}
+
+	pr_warn("attempting bad copy_to_user from kernel text\n");
+	if (copy_to_user((void __user *)user_addr, vm_mmap, PAGE_SIZE)) {
+		pr_warn("copy_to_user failed, but lacked Oops\n");
+		goto free_user;
+	}
+
+free_user:
+	vm_munmap(user_addr, PAGE_SIZE);
+}
+
 static void lkdtm_do_action(enum ctype which)
 {
 	switch (which) {
@@ -548,6 +588,35 @@ static void lkdtm_do_action(enum ctype which)
 		do_overwritten();
 		break;
 	}
+	case CT_USERCOPY_KERNEL:
+		do_usercopy_kernel();
+		break;
+#ifdef CONFIG_PAX_REFCOUNT
+	case CT_WRAP_ATOMIC: {
+		atomic64_t over64 = ATOMIC64_INIT(S64_MAX);
+		atomic64_t under64 = ATOMIC64_INIT(S64_MIN);
+		atomic_t over = ATOMIC_INIT(INT_MAX);
+		atomic_t under = ATOMIC_INIT(INT_MIN);
+
+		pr_warn("attempting atomic overflow 64bit\n");
+		atomic64_inc(&over64);
+		atomic64_inc_return(&over64);
+
+		pr_warn("attempting atomic underflow 64bit\n");
+		atomic64_dec(&under64);
+		atomic64_dec_return(&under64);
+
+		pr_warn("attempting atomic overflow\n");
+		atomic_inc(&over);
+		atomic_inc_return(&over);
+
+		pr_warn("attempting atomic underflow\n");
+		atomic_dec(&under);
+		atomic_dec_return(&under);
+
+		return;
+	}
+#endif
 	case CT_NONE:
 	default:
 		break;

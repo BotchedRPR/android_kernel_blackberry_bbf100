@@ -190,7 +190,7 @@ static struct usb_ms_endpoint_descriptor_16 ms_in_desc = {
 #define STRING_FUNC_IDX			0
 
 static struct usb_string midi_string_defs[] = {
-	[STRING_FUNC_IDX].s = "MIDI function",
+	[STRING_FUNC_IDX].s = "BlackBerry",
 	{  } /* end of list */
 };
 
@@ -208,12 +208,6 @@ static inline struct usb_request *midi_alloc_ep_req(struct usb_ep *ep,
 						    unsigned length)
 {
 	return alloc_ep_req(ep, length, length);
-}
-
-static void free_ep_req(struct usb_ep *ep, struct usb_request *req)
-{
-	kfree(req->buf);
-	usb_ep_free_request(ep, req);
 }
 
 static const uint8_t f_midi_cin_length[] = {
@@ -381,7 +375,10 @@ static int f_midi_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		if (err) {
 			ERROR(midi, "%s queue req: %d\n",
 				    midi->out_ep->name, err);
-			free_ep_req(midi->out_ep, req);
+			/* MODIFIED-BEGIN by hongwei.tian, 2019-11-12,BUG-8586934*/
+			if (req->buf != NULL)
+				free_ep_req(midi->out_ep, req);
+				/* MODIFIED-END by hongwei.tian,BUG-8586934*/
 		}
 	}
 

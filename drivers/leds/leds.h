@@ -2,6 +2,7 @@
  * LED Core
  *
  * Copyright 2005 Openedhand Ltd.
+ * Copyright (C) 2016 BlackBerry Limited // MODIFIED by Haojun Chen, 2017-07-14,BUG-5066810
  *
  * Author: Richard Purdie <rpurdie@openedhand.com>
  *
@@ -20,6 +21,13 @@ static inline void led_set_brightness_async(struct led_classdev *led_cdev,
 					enum led_brightness value)
 {
 	value = min(value, led_cdev->max_brightness);
+/* MODIFIED-BEGIN by Haojun Chen, 2017-07-14,BUG-5066810*/
+#ifdef CONFIG_TCT_SDM660_COMMON
+	if ((led_cdev->flags & LED_LOG_FIRST_BRIGHTNESS) &&
+		led_cdev->brightness == 0 && value > 0)
+		pr_info("%s 1st brightness %d\n",  led_cdev->name, value);
+#endif
+/* MODIFIED-END by Haojun Chen,BUG-5066810*/
 	led_cdev->brightness = value;
 
 	if (!(led_cdev->flags & LED_SUSPENDED))

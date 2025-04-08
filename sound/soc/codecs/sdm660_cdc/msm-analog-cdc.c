@@ -906,6 +906,19 @@ static int msm_anlg_cdc_free_irq(struct snd_soc_codec *codec,
 	return wcd9xxx_spmi_free_irq(irq, data);
 }
 
+/* MODIFIED-BEGIN by hongwei.tian, 2018-05-14,BUG-6312386*/
+#if defined(CONFIG_TCT_SDM636_LUNA)
+static bool msm_anlg_cdc_mbhc_hphr_spk_status(struct wcd_mbhc *wcd_mbhc)
+{
+	struct snd_soc_codec *codec = wcd_mbhc->codec;
+	struct sdm660_cdc_priv *sdm660_cdc =
+					snd_soc_codec_get_drvdata(codec);
+
+	return sdm660_cdc->spk_ext_pa_status;
+}
+#endif
+/* MODIFIED-END by hongwei.tian,BUG-6312386*/
+
 static const struct wcd_mbhc_cb mbhc_cb = {
 	.enable_mb_source = msm_anlg_cdc_enable_ext_mb_source,
 	.trim_btn_reg = msm_anlg_cdc_trim_btn_reg,
@@ -928,7 +941,24 @@ static const struct wcd_mbhc_cb mbhc_cb = {
 	.hph_pa_on_status = msm_anlg_cdc_mbhc_hph_pa_on_status,
 	.set_btn_thr = msm_anlg_cdc_mbhc_program_btn_thr,
 	.extn_use_mb = msm_anlg_cdc_use_mb,
+/* MODIFIED-BEGIN by hongwei.tian, 2018-05-14,BUG-6312386*/
+#if defined(CONFIG_TCT_SDM636_LUNA)
+	.is_hphr_spk_on= msm_anlg_cdc_mbhc_hphr_spk_status,
+#endif
+/* MODIFIED-END by hongwei.tian,BUG-6312386*/
 };
+
+
+/* MODIFIED-BEGIN by hongwei.tian, 2018-01-08,BUG-5860103*/
+void msm_anlg_cdc_hph_ext_switch_cb(
+		int (*codec_hph_ext_switch)(struct snd_soc_codec *codec, int enable), struct snd_soc_codec *codec)
+{
+	struct sdm660_cdc_priv *sdm660_cdc = snd_soc_codec_get_drvdata(codec);
+
+	pr_debug("%s: Enter\n", __func__);
+	sdm660_cdc->codec_hph_switch_cb = codec_hph_ext_switch;
+}
+/* MODIFIED-END by hongwei.tian,BUG-5860103*/
 
 static const uint32_t wcd_imped_val[] = {4, 8, 12, 13, 16,
 					20, 24, 28, 32,
@@ -1615,6 +1645,48 @@ static int msm_anlg_cdc_loopback_mode_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int msm_anlg_cdc_hph_switch_get(struct snd_kcontrol *kcontrol,
+					  struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct sdm660_cdc_priv *sdm660_cdc = snd_soc_codec_get_drvdata(codec);
+	dev_dbg(codec->dev, "%s: ucontrol->value.integer.value[0] = %ld\n",
+		__func__, ucontrol->value.integer.value[0]);
+
+	ucontrol->value.integer.value[0] = sdm660_cdc->hph_switch_status;
+	return 0;
+}
+
+static int msm_anlg_cdc_hph_switch_put(struct snd_kcontrol *kcontrol,
+					  struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct sdm660_cdc_priv *sdm660_cdc = snd_soc_codec_get_drvdata(codec);
+
+	dev_dbg(codec->dev, "%s: ucontrol->value.integer.value[0] = %ld\n",
+		__func__, ucontrol->value.integer.value[0]);
+	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		sdm660_cdc->hph_switch_status = 0;
+		dev_dbg(codec->dev,
+			"%s: disable external hph switch\n", __func__);
+		if(sdm660_cdc->codec_hph_switch_cb)
+			sdm660_cdc->codec_hph_switch_cb(codec, 0);
+		break;
+	case 1:
+		sdm660_cdc->hph_switch_status = 1;
+		dev_dbg(codec->dev,
+			"%s: enable external hph switch\n", __func__);
+		if(sdm660_cdc->codec_hph_switch_cb)
+			sdm660_cdc->codec_hph_switch_cb(codec, 1);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int msm_anlg_cdc_pa_gain_get(struct snd_kcontrol *kcontrol,
 				    struct snd_ctl_elem_value *ucontrol)
 {
@@ -1952,6 +2024,12 @@ static const struct soc_enum msm_anlg_cdc_hph_mode_ctl_enum[] = {
 			msm_anlg_cdc_hph_mode_ctrl_text),
 };
 
+static const char * const msm_anlg_cdc_hph_switch_ctrl_text[] = {
+		"Off", "On"};
+static const struct soc_enum msm_anlg_cdc_hph_switch_ctl_enum[] = {
+		SOC_ENUM_SINGLE_EXT(2, msm_anlg_cdc_hph_switch_ctrl_text),
+};
+
 /*cut of frequency for high pass filter*/
 static const char * const cf_text[] = {
 	"MIN_3DB_4Hz", "MIN_3DB_75Hz", "MIN_3DB_150Hz"
@@ -1987,6 +2065,8 @@ static const struct snd_kcontrol_new msm_anlg_cdc_snd_controls[] = {
 	SOC_SINGLE_TLV("ADC3 Volume", MSM89XX_PMIC_ANALOG_TX_3_EN, 3,
 					8, 0, analog_gain),
 
+	SOC_ENUM_EXT("Ext HPH Switch", msm_anlg_cdc_hph_switch_ctl_enum[0],
+		msm_anlg_cdc_hph_switch_get, msm_anlg_cdc_hph_switch_put),
 
 };
 
@@ -2145,6 +2225,7 @@ static const struct soc_enum lo_enum =
 static const struct snd_kcontrol_new lo_mux[] = {
 	SOC_DAPM_ENUM("LINE_OUT", lo_enum)
 };
+
 
 static void msm_anlg_cdc_codec_enable_adc_block(struct snd_soc_codec *codec,
 					 int enable)
@@ -3081,6 +3162,7 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"Ext Spk Switch", "On", "HPHL PA"},
 	{"Ext Spk Switch", "On", "HPHR PA"},
 
+
 	{"HPHL PA", NULL, "HPHL"},
 	{"HPHR PA", NULL, "HPHR"},
 	{"HPHL", "Switch", "HPHL DAC"},
@@ -3323,16 +3405,26 @@ static int msm_anlg_cdc_codec_enable_spk_ext_pa(struct snd_soc_dapm_widget *w,
 			"%s: enable external speaker PA\n", __func__);
 		if (sdm660_cdc->codec_spk_ext_pa_cb)
 			sdm660_cdc->codec_spk_ext_pa_cb(codec, 1);
+/* MODIFIED-BEGIN by hongwei.tian, 2018-05-14,BUG-6312386*/
+#if defined(CONFIG_TCT_SDM636_LUNA)
+		sdm660_cdc->spk_ext_pa_status = true;
+#endif
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
 		dev_dbg(codec->dev,
 			"%s: enable external speaker PA\n", __func__);
 		if (sdm660_cdc->codec_spk_ext_pa_cb)
 			sdm660_cdc->codec_spk_ext_pa_cb(codec, 0);
+#if defined(CONFIG_TCT_SDM636_LUNA)
+		sdm660_cdc->spk_ext_pa_status = false;
+#endif
+/* MODIFIED-END by hongwei.tian,BUG-6312386*/
 		break;
 	}
 	return 0;
 }
+
+
 
 static int msm_anlg_cdc_codec_enable_ear_pa(struct snd_soc_dapm_widget *w,
 					    struct snd_kcontrol *kcontrol,
@@ -3424,7 +3516,7 @@ static const struct snd_soc_dapm_widget msm_anlg_cdc_dapm_widgets[] = {
 		msm_anlg_cdc_hph_pa_event, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_PRE_PMD |
 		SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_PGA_E("SPK PA", SND_SOC_NOPM,
+	SND_SOC_DAPM_PGA_E("SPK PA", MSM89XX_PMIC_ANALOG_SPKR_DRV_CTL, //SND_SOC_NOPM // MODIFIED by hongwei.tian, 2017-11-30,BUG-5706432
 			0, 0, NULL, 0, msm_anlg_cdc_codec_enable_spk_pa,
 			SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 			SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
@@ -4175,6 +4267,12 @@ static int msm_anlg_cdc_soc_probe(struct snd_soc_codec *codec)
 	 */
 	sdm660_cdc->boost_option = BOOST_SWITCH;
 	sdm660_cdc->hph_mode = NORMAL_MODE;
+	sdm660_cdc->hph_switch_status = 0;
+/* MODIFIED-BEGIN by hongwei.tian, 2018-05-14,BUG-6312386*/
+#if defined(CONFIG_TCT_SDM636_LUNA)
+	sdm660_cdc->spk_ext_pa_status = false;
+#endif
+/* MODIFIED-END by hongwei.tian,BUG-6312386*/
 
 	msm_anlg_cdc_dt_parse_boost_info(codec);
 	msm_anlg_cdc_set_boost_v(codec);

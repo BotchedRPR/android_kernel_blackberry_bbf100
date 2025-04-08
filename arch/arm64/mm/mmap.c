@@ -80,6 +80,9 @@ void arch_pick_mmap_layout(struct mm_struct *mm)
 {
 	unsigned long random_factor = 0UL;
 
+#ifdef CONFIG_PAX_RANDMMAP
+        if (!(mm->pax_flags & MF_PAX_RANDMMAP))
+#endif
 	if (current->flags & PF_RANDOMIZE)
 		random_factor = arch_mmap_rnd();
 
@@ -90,9 +93,34 @@ void arch_pick_mmap_layout(struct mm_struct *mm)
 	if (mmap_is_legacy()) {
 		mm->mmap_base = TASK_UNMAPPED_BASE + random_factor;
 		mm->get_unmapped_area = arch_get_unmapped_area;
+#ifdef CONFIG_PAX_RANDMMAP
+       		if (mm->pax_flags & MF_PAX_RANDMMAP)
+               		mm->mmap_base += mm->delta_mmap;
+#endif
+
 	} else {
 		mm->mmap_base = mmap_base(random_factor);
 		mm->get_unmapped_area = arch_get_unmapped_area_topdown;
+#ifdef CONFIG_PAX_RANDMMAP
+        	if (mm->pax_flags & MF_PAX_RANDMMAP)
+                	mm->mmap_base -= mm->delta_mmap + mm->delta_stack;
+#ifdef CONFIG_BBRY
+                /*
+                * Avoid randomizing into low 32GB(0x800000000ULL),  AVNTCLN-3373, AVEN-80062
+                * QC graphic driver requires mmap base should be above 32GB.
+                * KGSL defines:
+                * drivers/gpu/msm/kgsl_iommu.h:#define KGSL_IOMMU_SVM_BASE64 0x700000000ULL
+                * drivers/gpu/msm/kgsl_iommu.h:#define KGSL_IOMMU_SVM_END64 0x800000000ULL
+                */
+                if (!test_thread_flag(TIF_32BIT)) {
+                        if (mm->mmap_base <= 0x800000000ll){
+                                mm->mmap_base   += 0x800000000ll;
+                                mm->delta_mmap  -= 0x400000000ll;
+                                mm->delta_stack -= 0x400000000ll;
+                        }
+                }
+#endif /*CONFIG_BBRY*/
+#endif
 	}
 }
 EXPORT_SYMBOL_GPL(arch_pick_mmap_layout);

@@ -88,6 +88,18 @@
 #define __O_TMPFILE	020000000
 #endif
 
+#ifdef CONFIG_BBSECURE_O_BENEATH
+#ifndef O_BENEATH
+#define O_BENEATH	040000000	/* no / or .. in openat path */
+#endif
+#endif
+
+#ifdef CONFIG_BBSECURE_O_NOSYMLINK
+#ifndef O_NOSYMLINK
+#define O_NOSYMLINK	0200000000	/* no symlinks in openat path */
+#endif
+#endif
+
 /* a horrid kludge trying to make sure that this will fail on old kernels */
 #define O_TMPFILE (__O_TMPFILE | O_DIRECTORY)
 #define O_TMPFILE_MASK (__O_TMPFILE | O_DIRECTORY | O_CREAT)      

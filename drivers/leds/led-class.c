@@ -3,6 +3,7 @@
  *
  * Copyright (C) 2005 John Lenz <lenz@cs.wisc.edu>
  * Copyright (C) 2005-2007 Richard Purdie <rpurdie@openedhand.com>
+ * Copyright (c) 2016 BlackBerry Limited // MODIFIED by Haojun Chen, 2017-07-14,BUG-5066810
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -55,6 +56,24 @@ static ssize_t brightness_store(struct device *dev,
 
 	if (state == LED_OFF && !(led_cdev->flags & LED_KEEP_TRIGGER))
 		led_trigger_remove(led_cdev);
+/* MODIFIED-BEGIN by Haojun Chen, 2017-07-14,BUG-5066810*/
+#ifdef CONFIG_TCT_SDM660_COMMON
+	if (led_cdev->manual_override_en) {
+		/* Allow the upper layer to turn things OFF. */
+		if (state == 0)
+			led_set_brightness(led_cdev, state);
+		/* If the upper layer is trying to set a brightness and we
+		*  notice that we are currently not set to the user manually
+		*  requested brightness, readjust the brightness here.
+		*/
+		else if (led_cdev->usr_brightness_req != led_cdev->brightness)
+			led_set_brightness(led_cdev,
+						led_cdev->usr_brightness_req);
+		ret = size;
+		goto unlock;
+	}
+#endif
+/* MODIFIED-END by Haojun Chen,BUG-5066810*/
 	led_set_brightness(led_cdev, state);
 	led_cdev->usr_brightness_req = state;
 
@@ -91,6 +110,59 @@ static ssize_t max_brightness_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(max_brightness);
 
+/* MODIFIED-BEGIN by Haojun Chen, 2017-07-14,BUG-5066810*/
+#ifdef CONFIG_TCT_SDM660_COMMON
+static ssize_t manual_override_en_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%u\n", led_cdev->manual_override_en);
+}
+
+static ssize_t manual_override_en_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	unsigned long state;
+	ssize_t ret = -EINVAL;
+
+	ret = kstrtoul(buf, 10, &state);
+	if (ret)
+		return ret;
+
+	led_cdev->manual_override_en = (state);
+
+	return size;
+}
+static DEVICE_ATTR_RW(manual_override_en);
+
+static ssize_t brightness_override_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return brightness_show(dev, attr, buf);
+}
+
+static ssize_t brightness_override_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	unsigned long state;
+	ssize_t ret = -EINVAL;
+
+	ret = kstrtoul(buf, 10, &state);
+	if (ret)
+		return ret;
+
+	led_cdev->usr_brightness_req = state;
+	led_set_brightness(led_cdev, state);
+
+	return size;
+}
+static DEVICE_ATTR_RW(brightness_override);
+#endif
+/* MODIFIED-END by Haojun Chen,BUG-5066810*/
+
 #ifdef CONFIG_LEDS_TRIGGERS
 static DEVICE_ATTR(trigger, 0644, led_trigger_show, led_trigger_store);
 static struct attribute *led_trigger_attrs[] = {
@@ -105,6 +177,12 @@ static const struct attribute_group led_trigger_group = {
 static struct attribute *led_class_attrs[] = {
 	&dev_attr_brightness.attr,
 	&dev_attr_max_brightness.attr,
+/* MODIFIED-BEGIN by Haojun Chen, 2017-07-14,BUG-5066810*/
+#ifdef CONFIG_TCT_SDM660_COMMON
+	&dev_attr_manual_override_en.attr,
+	&dev_attr_brightness_override.attr,
+#endif
+/* MODIFIED-END by Haojun Chen,BUG-5066810*/
 	NULL,
 };
 

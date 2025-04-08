@@ -633,6 +633,7 @@ static const struct file_operations nfc_dev_fops = {
 };
 
 /* Check for availability of NQ_ NFC controller hardware */
+#ifdef CONFIG_NFC_HW_CHECK // MODIFIED by na.long, 2017-11-16,BUG-5609079
 static int nfcc_hw_check(struct i2c_client *client, struct nqx_dev *nqx_dev)
 {
 	int ret = 0;
@@ -702,32 +703,34 @@ static int nfcc_hw_check(struct i2c_client *client, struct nqx_dev *nqx_dev)
 		nqx_dev->nqx_info.info.fw_minor =
 				nci_init_rsp[init_rsp_len];
 	}
-	dev_dbg(&nqx_dev->client->dev, "NQ NFCC chip_type = %x\n",
+	/* MODIFIED-BEGIN by na.long, 2017-11-16,BUG-5609079*/
+	dev_err(&nqx_dev->client->dev, "NQ NFCC chip_type = %x\n",
 		nqx_dev->nqx_info.info.chip_type);
-	dev_dbg(&nqx_dev->client->dev, "NQ fw version = %x.%x.%x\n",
+	dev_err(&nqx_dev->client->dev, "NQ fw version = %x.%x.%x\n",
 		nqx_dev->nqx_info.info.rom_version,
 		nqx_dev->nqx_info.info.fw_major,
 		nqx_dev->nqx_info.info.fw_minor);
 
 	switch (nqx_dev->nqx_info.info.chip_type) {
 	case NFCC_NQ_210:
-		dev_dbg(&client->dev,
+		dev_err(&client->dev,
 		"%s: ## NFCC == NQ210 ##\n", __func__);
 		break;
 	case NFCC_NQ_220:
-		dev_dbg(&client->dev,
+		dev_err(&client->dev,
 		"%s: ## NFCC == NQ220 ##\n", __func__);
 		break;
 	case NFCC_NQ_310:
-		dev_dbg(&client->dev,
+		dev_err(&client->dev,
 		"%s: ## NFCC == NQ310 ##\n", __func__);
 		break;
 	case NFCC_NQ_330:
-		dev_dbg(&client->dev,
+		dev_err(&client->dev,
 		"%s: ## NFCC == NQ330 ##\n", __func__);
 		break;
 	case NFCC_PN66T:
-		dev_dbg(&client->dev,
+		dev_err(&client->dev,
+		/* MODIFIED-END by na.long,BUG-5609079*/
 		"%s: ## NFCC == PN66T ##\n", __func__);
 		break;
 	default:
@@ -748,6 +751,7 @@ err_nfcc_hw_check:
 done:
 	return ret;
 }
+#endif // MODIFIED by na.long, 2017-11-16,BUG-5609079
 
 /*
 	* Routine to enable clock.
@@ -1056,6 +1060,7 @@ static int nqx_probe(struct i2c_client *client,
 	 * present before attempting further hardware initialisation.
 	 *
 	 */
+#ifdef CONFIG_NFC_HW_CHECK // MODIFIED by na.long, 2017-11-16,BUG-5609079
 	r = nfcc_hw_check(client, nqx_dev);
 	if (r) {
 		/* make sure NFCC is not enabled */
@@ -1063,6 +1068,7 @@ static int nqx_probe(struct i2c_client *client,
 		/* We don't think there is hardware switch NFC OFF */
 		goto err_request_hw_check_failed;
 	}
+#endif // MODIFIED by na.long, 2017-11-16,BUG-5609079
 
 	/* Register reboot notifier here */
 	r = register_reboot_notifier(&nfcc_notifier);
@@ -1074,7 +1080,13 @@ static int nqx_probe(struct i2c_client *client,
 		 * nfcc_hw_check function not doing memory
 		 * allocation so using same goto target here
 		*/
+/* MODIFIED-BEGIN by na.long, 2017-11-16,BUG-5609079*/
+#ifdef CONFIG_NFC_HW_CHECK
 		goto err_request_hw_check_failed;
+#else
+        goto err_request_irq_failed;
+#endif
+/* MODIFIED-END by na.long,BUG-5609079*/
 	}
 
 #ifdef NFC_KERNEL_BU
@@ -1100,8 +1112,12 @@ static int nqx_probe(struct i2c_client *client,
 err_clock_en_failed:
 	unregister_reboot_notifier(&nfcc_notifier);
 #endif
+/* MODIFIED-BEGIN by na.long, 2017-11-16,BUG-5609079*/
+#ifdef CONFIG_NFC_HW_CHECK
 err_request_hw_check_failed:
 	free_irq(client->irq, nqx_dev);
+#endif
+/* MODIFIED-END by na.long,BUG-5609079*/
 err_request_irq_failed:
 	misc_deregister(&nqx_dev->nqx_device);
 err_misc_register:

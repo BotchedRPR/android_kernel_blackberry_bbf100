@@ -168,6 +168,11 @@ static SOC_ENUM_SINGLE_EXT_DECL(int5_mi2s_tx_chs, int_mi2s_ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(loopback_mclk_en, loopback_mclk_text);
 static SOC_ENUM_SINGLE_EXT_DECL(bt_sample_rate, bt_sample_rate_text);
 
+#ifdef CONFIG_TCT_SDM660_COMMON
+static const char *bbry_hph_src_select_texts[] = {"SDM", "AKM"};
+
+static SOC_ENUM_SINGLE_EXT_DECL(bbry_hph_src_select, bbry_hph_src_select_texts);
+#endif
 static int msm_dmic_event(struct snd_soc_dapm_widget *w,
 			  struct snd_kcontrol *kcontrol, int event);
 static int msm_int_enable_dig_cdc_clk(struct snd_soc_codec *codec, int enable,
@@ -498,9 +503,31 @@ static int is_ext_spk_gpio_support(struct platform_device *pdev,
 	}
 	return 0;
 }
+/* MODIFIED-BEGIN by hongwei.tian, 2018-01-05,BUG-5855789*/
+#ifdef CONFIG_SND_SOC_AW87319
+/* MODIFIED-BEGIN by hongwei.tian, 2018-03-02,BUG-6049146*/
+extern unsigned char aw87319_audio_speaker(void);
+extern unsigned char aw87319_audio_off(void);
+/* MODIFIED-END by hongwei.tian,BUG-6049146*/
 
 static int enable_spk_ext_pa(struct snd_soc_codec *codec, int enable)
 {
+	pr_debug("%s: %s external speaker PA\n", __func__,
+		enable ? "Enable" : "Disable");
+
+	if (enable) {
+		/* MODIFIED-BEGIN by hongwei.tian, 2018-03-02,BUG-6049146*/
+		aw87319_audio_speaker();
+	} else {
+		aw87319_audio_off();
+		/* MODIFIED-END by hongwei.tian,BUG-6049146*/
+	}
+	return 0;
+}
+#else
+static int enable_spk_ext_pa(struct snd_soc_codec *codec, int enable)
+{
+/* MODIFIED-END by hongwei.tian,BUG-5855789*/
 	struct snd_soc_card *card = codec->component.card;
 	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
 	int ret;
@@ -535,6 +562,8 @@ static int enable_spk_ext_pa(struct snd_soc_codec *codec, int enable)
 	}
 	return 0;
 }
+
+#endif // MODIFIED by hongwei.tian, 2018-01-05,BUG-5855789
 
 static int int_mi2s_get_idx_from_beid(int32_t be_id)
 {
@@ -874,6 +903,63 @@ static int msm_bt_sample_rate_put(struct snd_kcontrol *kcontrol,
 
 	return 0;
 }
+#ifdef CONFIG_TCT_SDM660_COMMON
+int g_hph_src_state = 0; // MODIFIED by hongwei.tian, 2017-12-21,BUG-5780230
+
+enum hph_src_enum {
+	HPH_SDM = 0,
+	HPH_AKM,
+};
+
+static int msm_hph_src_get(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+	printk("%s state %d\n", __func__, g_hph_src_state);
+	ucontrol->value.integer.value[0] = g_hph_src_state;
+	return 0;
+}
+extern int hph_in_detecting; // MODIFIED by hongwei.tian, 2018-01-10,BUG-5867922
+
+static int msm_hph_src_put(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_codec *codec = component->codec;
+	struct msm_asoc_mach_data *pdata = NULL;
+	int ret = 0;
+
+	int state = ucontrol->value.enumerated.item[0];
+
+	pdata = snd_soc_card_get_drvdata(codec->component.card);
+
+	printk("\n>>> %s  set  %d  ,status: %d<<<\n", __func__, state,hph_in_detecting); // MODIFIED by hongwei.tian, 2018-01-10,BUG-5867922
+
+	if (state == HPH_SDM)
+	{
+		ret = msm_cdc_pinctrl_select_active_state(
+					pdata->hph_switch_gpio_p);
+		if (ret) {
+			pr_err("%s: gpio set cannot be de-activated %s\n",
+					__func__, "hph_switch");
+		}
+
+	}
+	else if(!hph_in_detecting) // MODIFIED by hongwei.tian, 2018-01-10,BUG-5867922
+	{
+		ret = msm_cdc_pinctrl_select_sleep_state(
+					pdata->hph_switch_gpio_p);
+		if (ret) {
+			pr_err("%s: gpio set cannot be de-activated %s\n",
+					__func__, "hph_switch");
+		}
+	}
+
+	g_hph_src_state = state;
+
+	return 0;
+
+}
+#endif
 
 static const struct snd_kcontrol_new msm_snd_controls[] = {
 	SOC_ENUM_EXT("INT0_MI2S_RX Format", int0_mi2s_rx_format,
@@ -902,6 +988,11 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 	SOC_ENUM_EXT("BT SampleRate", bt_sample_rate,
 			msm_bt_sample_rate_get,
 			msm_bt_sample_rate_put),
+#ifdef CONFIG_TCT_SDM660_COMMON
+	SOC_ENUM_EXT("HPH SRC", bbry_hph_src_select,
+			msm_hph_src_get,
+			msm_hph_src_put),
+#endif
 };
 
 static const struct snd_kcontrol_new msm_sdw_controls[] = {
@@ -1198,7 +1289,7 @@ static void *def_msm_int_wcd_mbhc_cal(void)
 		return NULL;
 
 #define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(msm_int_wcd_cal)->X) = (Y))
-	S(v_hs_max, 1500);
+	S(v_hs_max, 1600); // MODIFIED by hongwei.tian, 2017-11-30,BUG-5706622
 #undef S
 #define S(X, Y) ((WCD_MBHC_CAL_BTN_DET_PTR(msm_int_wcd_cal)->X) = (Y))
 	S(num_btn, WCD_MBHC_DEF_BUTTONS);
@@ -1223,8 +1314,10 @@ static void *def_msm_int_wcd_mbhc_cal(void)
 	 */
 	btn_low[0] = 75;
 	btn_high[0] = 75;
-	btn_low[1] = 150;
-	btn_high[1] = 150;
+	/* MODIFIED-BEGIN by hongwei.tian, 2017-11-30,BUG-5706622*/
+	btn_low[1] = 120;
+	btn_high[1] = 120;
+	/* MODIFIED-END by hongwei.tian,BUG-5706622*/
 	btn_low[2] = 225;
 	btn_high[2] = 225;
 	btn_low[3] = 450;
@@ -1234,6 +1327,7 @@ static void *def_msm_int_wcd_mbhc_cal(void)
 
 	return msm_int_wcd_cal;
 }
+extern int config_hph_switch_gpio(struct snd_soc_codec *codec, int enable); // MODIFIED by hongwei.tian, 2018-05-14,BUG-6295864
 
 static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 {
@@ -1281,9 +1375,13 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_ignore_suspend(dapm, "DMIC2");
 	snd_soc_dapm_ignore_suspend(dapm, "DMIC3");
 	snd_soc_dapm_ignore_suspend(dapm, "DMIC4");
+	snd_soc_dapm_ignore_suspend(dapm, "Ext Spk"); // MODIFIED by hongwei.tian, 2018-05-08,BUG-6293783
 
 	snd_soc_dapm_sync(dapm);
 
+	if (gpio_is_valid(pdata->hph_ext_pa_gpio) ||  (pdata->hph_ext_pa_gpio_p)) {
+		msm_anlg_cdc_hph_ext_switch_cb(config_hph_switch_gpio, ana_cdc);
+	}
 	msm_anlg_cdc_spk_ext_pa_cb(enable_spk_ext_pa, ana_cdc);
 	msm_dig_cdc_hph_comp_cb(msm_config_hph_compander_gpio, dig_cdc);
 
@@ -2622,8 +2720,15 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Secondary MI2S Playback",
 		.cpu_dai_name = "msm-dai-q6-mi2s.1",
 		.platform_name = "msm-pcm-routing",
+/* MODIFIED-BEGIN by hongwei.tian, 2017-09-01,BUG-5247152*/
+#ifdef CONFIG_SND_SOC_AK4376
+		.codec_name = "ak4376",
+		.codec_dai_name = "ak4376-AIF1",
+#else
 		.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-rx",
+#endif
+/* MODIFIED-END by hongwei.tian,BUG-5247152*/
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_SECONDARY_MI2S_RX,
@@ -2651,8 +2756,15 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Tertiary MI2S Playback",
 		.cpu_dai_name = "msm-dai-q6-mi2s.2",
 		.platform_name = "msm-pcm-routing",
+/* MODIFIED-BEGIN by hongwei.tian, 2017-08-29,BUG-5232247*/
+#ifdef CONFIG_SND_SOC_TFA9911
+		.codec_dai_name = "tfa98xx-aif-6-34",
+		.codec_name = "tfa98xx.6-0034",
+#else
 		.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-rx",
+#endif
+/* MODIFIED-END by hongwei.tian,BUG-5232247*/
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_TERTIARY_MI2S_RX,

@@ -106,6 +106,11 @@ struct msm_ssphy_qmp {
 	int			init_seq_len;
 	unsigned int		*qmp_phy_reg_offset;
 	int			reg_offset_cnt;
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	struct mutex		ssphy_lock;
+#endif
+
 };
 
 static const struct of_device_id msm_usb_id_table[] = {
@@ -462,6 +467,10 @@ static int msm_ssphy_qmp_set_suspend(struct usb_phy *uphy, int suspend)
 	struct msm_ssphy_qmp *phy = container_of(uphy, struct msm_ssphy_qmp,
 					phy);
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	mutex_lock(&phy->ssphy_lock);
+#endif
+
 	dev_dbg(uphy->dev, "QMP PHY set_suspend for %s called with cable %s\n",
 			(suspend ? "suspend" : "resume"),
 			get_cable_status_str(phy));
@@ -469,6 +478,11 @@ static int msm_ssphy_qmp_set_suspend(struct usb_phy *uphy, int suspend)
 	if (phy->in_suspend == suspend) {
 		dev_dbg(uphy->dev, "%s: USB PHY is already %s.\n",
 			__func__, (suspend ? "suspended" : "resumed"));
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		mutex_unlock(&phy->ssphy_lock);
+#endif
+
 		return 0;
 	}
 
@@ -519,6 +533,10 @@ static int msm_ssphy_qmp_set_suspend(struct usb_phy *uphy, int suspend)
 		dev_dbg(uphy->dev, "QMP PHY is resumed\n");
 	}
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	mutex_unlock(&phy->ssphy_lock);
+#endif
+
 	return 0;
 }
 
@@ -528,9 +546,18 @@ static int msm_ssphy_qmp_notify_connect(struct usb_phy *uphy,
 	struct msm_ssphy_qmp *phy = container_of(uphy, struct msm_ssphy_qmp,
 					phy);
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	mutex_lock(&phy->ssphy_lock);
+#endif
+
 	dev_dbg(uphy->dev, "QMP phy connect notification\n");
 	phy->cable_connected = true;
 	dev_dbg(uphy->dev, "cable_connected=%d\n", phy->cable_connected);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	mutex_unlock(&phy->ssphy_lock);
+#endif
+
 	return 0;
 }
 
@@ -540,9 +567,18 @@ static int msm_ssphy_qmp_notify_disconnect(struct usb_phy *uphy,
 	struct msm_ssphy_qmp *phy = container_of(uphy, struct msm_ssphy_qmp,
 					phy);
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	mutex_lock(&phy->ssphy_lock);
+#endif
+
 	dev_dbg(uphy->dev, "QMP phy disconnect notification\n");
 	dev_dbg(uphy->dev, " cable_connected=%d\n", phy->cable_connected);
 	phy->cable_connected = false;
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	mutex_unlock(&phy->ssphy_lock);
+#endif
+
 	return 0;
 }
 
@@ -778,6 +814,10 @@ static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 	phy->ref_clk = devm_clk_get(dev, "ref_clk");
 	if (IS_ERR(phy->ref_clk))
 		phy->ref_clk = NULL;
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	mutex_init(&phy->ssphy_lock);
+#endif
 
 	platform_set_drvdata(pdev, phy);
 

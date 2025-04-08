@@ -20,6 +20,10 @@
 #include <linux/module.h>
 #include <linux/reboot.h>
 
+#ifdef CONFIG_BBSECURE_PATHTRUST
+#include <linux/pathtrust.h>
+#endif
+
 #define DM_MSG_PREFIX			"verity"
 
 #define DM_VERITY_ENV_LENGTH		42
@@ -531,7 +535,9 @@ no_prefetch_cluster:
 		// for emmc, it is more efficient to send bigger read
 		prefetch_size = max((sector_t)CONFIG_DM_VERITY_HASH_PREFETCH_MIN_SIZE,
 			hash_block_end - hash_block_start + 1);
-		if ((hash_block_start + prefetch_size) >= (v->hash_start + v->hash_blocks)) {
+		// Defect: 6291598, fix 'attempt to access beyond end of device' on oem partition
+//		if ((hash_block_start + prefetch_size) >= (v->hash_start + v->hash_blocks)) {
+		if ((hash_block_start + prefetch_size) >= v->hash_blocks) {
 			prefetch_size = hash_block_end - hash_block_start + 1;
 		}
 		dm_bufio_prefetch(v->bufio, hash_block_start,
@@ -1063,6 +1069,30 @@ int verity_ctr(struct dm_target *ti, unsigned argc, char **argv)
 	ti->per_bio_data_size = roundup(ti->per_bio_data_size,
 					__alignof__(struct dm_verity_io));
 
+#ifdef CONFIG_BBSECURE_PATHTRUST
+	{
+		struct mapped_device *md;
+		struct block_device *bdev;
+		struct gendisk *disk;
+
+		/* Retrieve block name of dm-verity mapped device */
+		md = dm_table_get_md(ti->table);
+
+		if (md) {
+			dm_get(md);
+			disk = dm_disk(md);
+			if (disk) {
+				get_disk(disk);
+				bdev = bdget_disk(disk, 0);
+				if (!bdev || pathtrust_add_dev(bdev->bd_dev))
+					DMERR("failed to add device '%s' to pathtrust", disk->disk_name);
+
+				put_disk(disk);
+			}
+			dm_put(md);
+		}
+	}
+#endif
 	return 0;
 
 bad:

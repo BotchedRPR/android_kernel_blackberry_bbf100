@@ -72,6 +72,8 @@ obj-$(CONFIG_LEDS_SEAD3)		+= leds-sead3.o
 
 # LED SPI Drivers
 obj-$(CONFIG_LEDS_DAC124S085)		+= leds-dac124s085.o
+obj-$(CONFIG_LEDS_SMG31323)             += leds-smg31323.o
+obj-$(CONFIG_LEDS_AW2027)               += leds-aw2027.o
 
 # LED Triggers
 obj-$(CONFIG_LEDS_TRIGGERS)		+= trigger/

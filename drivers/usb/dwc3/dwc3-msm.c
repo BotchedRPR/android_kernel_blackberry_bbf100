@@ -1563,6 +1563,10 @@ static void dwc3_restart_usb_work(struct work_struct *w)
 		pm_runtime_suspend(mdwc->dev);
 	}
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	flush_delayed_work(&mdwc->sm_work);
+#endif
+
 	mdwc->in_restart = false;
 	/* Force reconnect only if cable is still connected */
 	if (mdwc->vbus_active)
@@ -2878,6 +2882,17 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	int ret = 0;
 	int ext_hub_reset_gpio;
 	u32 val;
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (dev && node && of_property_read_bool(node, "extcon")) {
+		struct extcon_dev *edev=NULL;
+		edev = extcon_get_edev_by_phandle(dev, 0);
+		if (IS_ERR(edev) && PTR_ERR(edev) != -ENODEV) {
+			pr_err("Could not get extcon, deferring dwc3-msm probe\n");
+			return -EPROBE_DEFER;
+		}
+	}
+#endif
 
 	mdwc = devm_kzalloc(&pdev->dev, sizeof(*mdwc), GFP_KERNEL);
 	if (!mdwc)

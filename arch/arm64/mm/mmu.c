@@ -46,6 +46,13 @@
 
 #include "mm.h"
 
+#ifdef CONFIG_DEBUG_WX
+void ptdump_check_wx(void);
+#define debug_checkwx()	ptdump_check_wx()
+#else
+#define debug_checkwx()	do { } while (0)
+#endif
+
 u64 idmap_t0sz = TCR_T0SZ(VA_BITS);
 
 u64 kimage_voffset __read_mostly;
@@ -465,6 +472,10 @@ void mark_rodata_ro(void)
 	section_size = (unsigned long)__init_begin - (unsigned long)__start_rodata;
 	create_mapping_late(__pa(__start_rodata), (unsigned long)__start_rodata,
 			    section_size, PAGE_KERNEL_RO);
+
+	debug_checkwx();
+
+
 }
 
 void fixup_init(void)

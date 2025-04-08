@@ -381,6 +381,7 @@ static int32_t msm_flash_i2c_release(
 	return 0;
 }
 
+#ifndef CONFIG_BBRY
 static int32_t msm_flash_off(struct msm_flash_ctrl_t *flash_ctrl,
 	struct msm_flash_cfg_data_t *flash_data)
 {
@@ -401,6 +402,40 @@ static int32_t msm_flash_off(struct msm_flash_ctrl_t *flash_ctrl,
 	CDBG("Exit\n");
 	return 0;
 }
+#else
+static int32_t msm_flash_off(struct msm_flash_ctrl_t *flash_ctrl,
+	struct msm_flash_cfg_data_t *flash_data)
+{
+	int32_t i = 0;
+
+	CDBG("Enter\n");
+
+	if (flash_data != NULL)
+		flash_ctrl->current_flash_cfg = flash_data->cfg_type;
+
+	for (i = 0; i < flash_ctrl->flash_num_sources; i++) {
+		if (flash_ctrl->flash_trigger[i]) {
+			led_trigger_event(flash_ctrl->flash_trigger[i], 0);
+			flash_ctrl->flash_current[i] = 0;
+		}
+	}
+	flash_ctrl->total_flash_current = 0;
+
+	for (i = 0; i < flash_ctrl->torch_num_sources; i++) {
+		if (flash_ctrl->torch_trigger[i]) {
+			led_trigger_event(flash_ctrl->torch_trigger[i], 0);
+			flash_ctrl->torch_current[i] = 0;
+		}
+	}
+	flash_ctrl->total_torch_current = 0;
+
+	if (flash_ctrl->switch_trigger)
+		led_trigger_event(flash_ctrl->switch_trigger, 0);
+
+	CDBG("Exit\n");
+	return 0;
+}
+#endif /* CONFIG_BBRY */
 
 static int32_t msm_flash_i2c_write_setting_array(
 	struct msm_flash_ctrl_t *flash_ctrl,
@@ -615,10 +650,23 @@ static int32_t msm_flash_low(
 	int32_t i = 0;
 
 	CDBG("Enter\n");
+#ifdef CONFIG_BBRY
+	flash_ctrl->current_flash_cfg = flash_data->cfg_type;
+#endif /* CONFIG_BBRY */
 	/* Turn off flash triggers */
+#ifndef CONFIG_BBRY
 	for (i = 0; i < flash_ctrl->flash_num_sources; i++)
 		if (flash_ctrl->flash_trigger[i])
 			led_trigger_event(flash_ctrl->flash_trigger[i], 0);
+#else
+	for (i = 0; i < flash_ctrl->flash_num_sources; i++) {
+		if (flash_ctrl->flash_trigger[i]) {
+			led_trigger_event(flash_ctrl->flash_trigger[i], 0);
+			flash_ctrl->flash_current[i] = 0;
+		}
+	}
+	flash_ctrl->total_flash_current = 0;
+#endif /* CONFIG_BBRY */
 
 	/* Turn on flash triggers */
 	for (i = 0; i < flash_ctrl->torch_num_sources; i++) {
@@ -634,12 +682,23 @@ static int32_t msm_flash_low(
 					curr);
 			}
 			CDBG("low_flash_current[%d] = %d", i, curr);
+#ifndef CONFIG_BBRY
 			led_trigger_event(flash_ctrl->torch_trigger[i],
 				curr);
+#else
+			flash_ctrl->torch_current[i] = curr;
+			flash_ctrl->total_torch_current += curr;
+#endif /* CONFIG_BBRY */
 		}
 	}
+
+#ifndef CONFIG_BBRY
 	if (flash_ctrl->switch_trigger)
 		led_trigger_event(flash_ctrl->switch_trigger, 1);
+#else
+	msm_flash_apply_thermal_limit_torch(flash_ctrl);
+#endif /* CONFIG_BBRY */
+
 	CDBG("Exit\n");
 	return 0;
 }
@@ -652,10 +711,23 @@ static int32_t msm_flash_high(
 	int32_t max_current = 0;
 	int32_t i = 0;
 
+#ifdef CONFIG_BBRY
+	flash_ctrl->current_flash_cfg = flash_data->cfg_type;
+#endif /* CONFIG_BBRY */
 	/* Turn off torch triggers */
+#ifndef CONFIG_BBRY
 	for (i = 0; i < flash_ctrl->torch_num_sources; i++)
 		if (flash_ctrl->torch_trigger[i])
 			led_trigger_event(flash_ctrl->torch_trigger[i], 0);
+#else
+	for (i = 0; i < flash_ctrl->torch_num_sources; i++) {
+		if (flash_ctrl->torch_trigger[i]) {
+			led_trigger_event(flash_ctrl->torch_trigger[i], 0);
+			flash_ctrl->torch_current[i] = 0;
+		}
+	}
+	flash_ctrl->total_torch_current = 0;
+#endif /* CONFIG_BBRY */
 
 	/* Turn on flash triggers */
 	for (i = 0; i < flash_ctrl->flash_num_sources; i++) {
@@ -671,12 +743,21 @@ static int32_t msm_flash_high(
 					i, curr);
 			}
 			CDBG("high_flash_current[%d] = %d", i, curr);
+#ifndef CONFIG_BBRY
 			led_trigger_event(flash_ctrl->flash_trigger[i],
 				curr);
+#else
+			flash_ctrl->flash_current[i] = curr;
+			flash_ctrl->total_flash_current += curr;
+#endif /* CONFIG_BBRY */
 		}
 	}
+#ifndef CONFIG_BBRY
 	if (flash_ctrl->switch_trigger)
 		led_trigger_event(flash_ctrl->switch_trigger, 1);
+#else
+	msm_flash_apply_thermal_limit_flash(flash_ctrl);
+#endif /* CONFIG_BBRY */
 	return 0;
 }
 
@@ -707,6 +788,9 @@ static int32_t msm_flash_release(
 	struct msm_flash_ctrl_t *flash_ctrl)
 {
 	int32_t rc = 0;
+#ifdef CONFIG_BBRY
+	flash_ctrl->current_flash_cfg = CFG_FLASH_RELEASE;
+#endif /* CONFIG_BBRY */
 
 	rc = flash_ctrl->func_tbl->camera_flash_off(flash_ctrl, NULL);
 	if (rc < 0) {
@@ -717,6 +801,151 @@ static int32_t msm_flash_release(
 	flash_ctrl->flash_state = MSM_CAMERA_FLASH_RELEASE;
 	return 0;
 }
+
+#ifdef CONFIG_BBRY
+static void msm_flash_apply_thermal_limit_torch(
+	struct msm_flash_ctrl_t *fctrl)
+{
+	uint32_t i;
+	uint32_t limited_current = 0;
+	uint32_t current_limit = 0;
+
+	/* torch and low modes only differ in which thermal limit they use */
+	if (fctrl->current_flash_cfg == CFG_TORCH_ON) {
+		current_limit = min(fctrl->total_torch_current,
+			fctrl->torch_thermal_limit);
+	} else {
+		current_limit = min(fctrl->total_torch_current,
+			fctrl->flash_thermal_limit);
+	}
+
+	CDBG("Torch/Flash_Low current limit is %d\n", current_limit);
+
+	for (i = 0; i < fctrl->torch_num_sources; i++) {
+		if (fctrl->torch_trigger[i]) {
+			limited_current =
+				(fctrl->torch_current[i] *
+				current_limit) /
+				fctrl->total_torch_current;
+		}
+		led_trigger_event(fctrl->torch_trigger[i],
+			limited_current);
+		if (limited_current < fctrl->torch_current[i]) {
+			pr_err("Thermal clamped Torch[%d]/Flash_Low[%d] current from %d mA to %d mA\n",
+				i, i, fctrl->torch_current[i], limited_current);
+		}
+	}
+
+	if (fctrl->switch_trigger) {
+		if (current_limit == 0)
+			led_trigger_event(fctrl->switch_trigger, 0);
+		else
+			led_trigger_event(fctrl->switch_trigger, 1);
+	}
+}
+
+static void msm_flash_apply_thermal_limit_flash(
+	struct msm_flash_ctrl_t *fctrl)
+{
+	uint32_t i;
+
+	CDBG("Flash current limit is %d, requested is %d\n",
+		fctrl->flash_thermal_limit, fctrl->total_flash_current);
+
+	if (fctrl->total_flash_current > fctrl->flash_thermal_limit) {
+		for (i = 0; i < fctrl->flash_num_sources; i++) {
+			if (fctrl->flash_trigger[i]) {
+				uint32_t limited_current =
+					(fctrl->flash_current[i] *
+					fctrl->flash_thermal_limit) /
+					fctrl->total_flash_current;
+				led_trigger_event(fctrl->flash_trigger[i],
+						limited_current);
+			}
+		}
+		pr_err("Thermal clamped flash_high current from %d to %d mA\n",
+			fctrl->total_flash_current, fctrl->flash_thermal_limit);
+	} else {
+		for (i = 0; i < fctrl->flash_num_sources; i++) {
+			if (fctrl->flash_trigger[i]) {
+				led_trigger_event(fctrl->flash_trigger[i],
+					fctrl->flash_current[i]);
+			}
+		}
+	}
+
+	if (fctrl->switch_trigger) {
+		if (fctrl->flash_thermal_limit == 0)
+			led_trigger_event(fctrl->switch_trigger, 0);
+		else
+			led_trigger_event(fctrl->switch_trigger, 1);
+	}
+}
+
+static int32_t msm_flash_config_thermal_limits(
+	struct msm_flash_ctrl_t *fctrl,
+	struct msm_flash_cfg_data_t *flash_data)
+{
+	int32_t rc = 0;
+	uint32_t old_thermal_limit;
+
+	CDBG("Kernel Flash Mitigation level %d Torch Mitigation Level %d",
+		flash_data->flash_mitigation_level,
+		flash_data->torch_mitigation_level);
+
+	/* flash_thermal_limit applies to low and high LED states */
+	old_thermal_limit = fctrl->flash_thermal_limit;
+	if (flash_data->flash_mitigation_level > (NUM_FLASH_THERMAL_LEVELS - 1)) {
+		flash_data->flash_mitigation_level =
+			NUM_FLASH_THERMAL_LEVELS - 1;
+	}
+	else if (flash_data->flash_mitigation_level < 0)
+		flash_data->flash_mitigation_level = 0;
+
+	fctrl->flash_thermal_limit =
+		fctrl->flash_limits[flash_data->flash_mitigation_level];
+
+	if (fctrl->flash_state ==  MSM_CAMERA_FLASH_INIT) {
+		/* if the flash thermal limit changed, re-apply it */
+		if (old_thermal_limit != fctrl->flash_thermal_limit) {
+			if ((fctrl->current_flash_cfg == CFG_FLASH_LOW) &&
+			(0 != fctrl->torch_current))
+				msm_flash_apply_thermal_limit_torch(fctrl);
+			else if ((fctrl->current_flash_cfg == CFG_FLASH_HIGH) &&
+			(0 != fctrl->total_flash_current))
+				msm_flash_apply_thermal_limit_flash(fctrl);
+		}
+	}
+
+	/* torch_thermal_limit only applies to torch state */
+	old_thermal_limit = fctrl->torch_thermal_limit;
+	if (flash_data->torch_mitigation_level > (NUM_TORCH_THERMAL_LEVELS - 1)) {
+		flash_data->torch_mitigation_level =
+			NUM_TORCH_THERMAL_LEVELS - 1;
+	}
+	else if (flash_data->torch_mitigation_level < 0)
+		flash_data->torch_mitigation_level = 0;
+
+	fctrl->torch_thermal_limit =
+		fctrl->torch_limits[flash_data->torch_mitigation_level];
+
+	if (fctrl->flash_state ==  MSM_CAMERA_FLASH_INIT) {
+		/* if the torch thermal limit changed, re-apply it */
+		if (old_thermal_limit != fctrl->torch_thermal_limit) {
+			if ((fctrl->current_flash_cfg == CFG_TORCH_ON) &&
+			0 != fctrl->total_torch_current)
+				msm_flash_apply_thermal_limit_torch(fctrl);
+		}
+	}
+
+	pr_err(
+		"Flash thermal level %d (%d mA), torch thermal level %d (%d mA)\n",
+		flash_data->flash_mitigation_level, fctrl->flash_thermal_limit,
+		flash_data->torch_mitigation_level, fctrl->torch_thermal_limit);
+
+	return rc;
+}
+#endif /* CONFIG_BBRY */
 
 static int32_t msm_flash_config(struct msm_flash_ctrl_t *flash_ctrl,
 	void __user *argp)
@@ -754,6 +983,9 @@ static int32_t msm_flash_config(struct msm_flash_ctrl_t *flash_ctrl,
 				flash_ctrl->flash_state);
 		}
 		break;
+#ifdef CONFIG_BBRY
+	case CFG_TORCH_ON:
+#endif /* CONFIG_BBRY */
 	case CFG_FLASH_LOW:
 		if ((flash_ctrl->flash_state == MSM_CAMERA_FLASH_OFF) ||
 			(flash_ctrl->flash_state == MSM_CAMERA_FLASH_INIT)) {
@@ -778,6 +1010,11 @@ static int32_t msm_flash_config(struct msm_flash_ctrl_t *flash_ctrl,
 				flash_ctrl->flash_state);
 		}
 		break;
+#ifdef CONFIG_BBRY
+	case CFG_FLASH_MITIGATION_LEVELS:
+		rc = msm_flash_config_thermal_limits(flash_ctrl, flash_data);
+		break;
+#endif /* CONFIG_BBRY */
 	default:
 		rc = -EFAULT;
 		break;
@@ -1148,6 +1385,28 @@ static int32_t msm_flash_get_dt_data(struct device_node *of_node,
 	CDBG("%s:%d fctrl->flash_driver_type = %d", __func__, __LINE__,
 		fctrl->flash_driver_type);
 
+#ifdef CONFIG_BBRY
+	fctrl->current_flash_cfg = CFG_FLASH_OFF;
+
+	/* Read flash mitigation levels */
+	rc = of_property_read_u32_array(of_node, "oem,flash-mitigation-levels",
+		fctrl->flash_limits, NUM_FLASH_THERMAL_LEVELS);
+	if (rc < 0) {
+		pr_err("flash-mitigation-levels: read failed\n");
+		return -EINVAL;
+	}
+	fctrl->flash_thermal_limit = fctrl->flash_limits[0];
+
+	/* Read torch mitigation levels */
+	rc = of_property_read_u32_array(of_node, "oem,torch-mitigation-levels",
+		fctrl->torch_limits, NUM_TORCH_THERMAL_LEVELS);
+	if (rc < 0) {
+		pr_err("torch-mitigation-levels: read failed\n");
+		return -EINVAL;
+	}
+	fctrl->torch_thermal_limit = fctrl->torch_limits[0];
+#endif /* CONFIG_BBRY */
+
 	return rc;
 }
 
@@ -1185,9 +1444,20 @@ static long msm_flash_subdev_do_ioctl(
 		switch (flash_data.cfg_type) {
 		case CFG_FLASH_OFF:
 		case CFG_FLASH_LOW:
+#ifdef CONFIG_BBRY
+		case CFG_TORCH_ON:
+#endif /* CONFIG_BBRY */
 		case CFG_FLASH_HIGH:
 			flash_data.cfg.settings = compat_ptr(u32->cfg.settings);
 			break;
+#ifdef CONFIG_BBRY
+		case CFG_FLASH_MITIGATION_LEVELS:
+			flash_data.flash_mitigation_level =
+				u32->flash_mitigation_level;
+			flash_data.torch_mitigation_level =
+				u32->torch_mitigation_level;
+			break;
+#endif /* CONFIG_BBRY */
 		case CFG_FLASH_INIT:
 			flash_data.cfg.flash_init_info = &flash_init_info;
 			if (copy_from_user(&flash_init_info32,
@@ -1225,6 +1495,10 @@ static long msm_flash_subdev_do_ioctl(
 		u32->flash_current[i] = flash_data.flash_current[i];
 		u32->flash_duration[i] = flash_data.flash_duration[i];
 	}
+#ifdef CONFIG_BBRY
+	u32->flash_mitigation_level = flash_data.flash_mitigation_level;
+	u32->torch_mitigation_level = flash_data.torch_mitigation_level;
+#endif /* CONFIG_BBRY */
 	CDBG("Exit");
 	return rc;
 }

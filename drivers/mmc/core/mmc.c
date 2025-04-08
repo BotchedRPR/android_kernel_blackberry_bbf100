@@ -1,6 +1,7 @@
 /*
  *  linux/drivers/mmc/core/mmc.c
  *
+ *  Copyright (C) 2016 BlackBerry Limited
  *  Copyright (C) 2003-2004 Russell King, All Rights Reserved.
  *  Copyright (C) 2005-2007 Pierre Ossman, All Rights Reserved.
  *  MMCv4 support Copyright (C) 2006 Philip Langdale, All Rights Reserved.
@@ -832,6 +833,9 @@ MMC_DEV_ATTR(raw_rpmb_size_mult, "%#x\n", card->ext_csd.raw_rpmb_size_mult);
 MMC_DEV_ATTR(enhanced_rpmb_supported, "%#x\n",
 		card->ext_csd.enhanced_rpmb_supported);
 MMC_DEV_ATTR(rel_sectors, "%#x\n", card->ext_csd.rel_sectors);
+#ifdef CONFIG_TCT_SDM660_COMMON
+MMC_DEV_ATTR(device_type, "0x%x\n", (card->ext_csd.raw_card_type & EXT_CSD_CARD_TYPE_MASK));
+#endif
 
 static ssize_t mmc_fwrev_show(struct device *dev,
 			      struct device_attribute *attr,
@@ -871,6 +875,9 @@ static struct attribute *mmc_std_attrs[] = {
 	&dev_attr_raw_rpmb_size_mult.attr,
 	&dev_attr_enhanced_rpmb_supported.attr,
 	&dev_attr_rel_sectors.attr,
+#ifdef CONFIG_TCT_SDM660_COMMON
+	&dev_attr_device_type.attr,
+#endif
 	NULL,
 };
 ATTRIBUTE_GROUPS(mmc_std);

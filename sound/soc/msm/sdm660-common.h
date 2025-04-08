@@ -99,10 +99,20 @@ struct msm_asoc_mach_data {
 	struct device_node *pdm_gpio_p; /* used by pinctrl API */
 	struct device_node *comp_gpio_p; /* used by pinctrl API */
 	struct device_node *dmic_gpio_p; /* used by pinctrl API */
+	struct device_node *tert_mi2s_gpio_p; /* used by pinctrl API */
 	struct device_node *ext_spk_gpio_p; /* used by pinctrl API */
 	struct snd_soc_codec *codec;
 	struct sdm660_codec sdm660_codec_fn;
 	struct snd_info_entry *codec_root;
+	/* MODIFIED-BEGIN by hongwei.tian, 2017-08-29,BUG-5232247*/
+#ifdef CONFIG_TCT_SDM660_COMMON
+	struct regulator *switch_vdd;
+	int hph_switch_vdd_gpio;
+	int hph_switch_gpio;
+	struct device_node *hph_switch_vdd_gpio_p;
+	struct device_node *hph_switch_gpio_p;
+#endif
+	/* MODIFIED-END by hongwei.tian,BUG-5232247*/
 	int spk_ext_pa_gpio;
 	int mclk_freq;
 	bool native_clk_set;
@@ -116,6 +126,10 @@ struct msm_asoc_mach_data {
 	struct delayed_work disable_int_mclk0_work;
 	struct afe_clk_set digital_cdc_core_clk;
 	struct msm_snd_interrupt msm_snd_intr_lpi;
+	/* MODIFIED-BEGIN by hongwei.tian, 2018-01-08,BUG-5860103*/
+	int hph_ext_pa_gpio;
+	struct device_node *hph_ext_pa_gpio_p;
+	/* MODIFIED-END by hongwei.tian,BUG-5860103*/
 };
 
 int msm_common_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,

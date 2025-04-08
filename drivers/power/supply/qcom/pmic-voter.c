@@ -357,6 +357,11 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 	int rc = 0;
 	bool similar_vote = false;
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (IS_ERR_OR_NULL(votable))
+		return -EINVAL;
+#endif
+
 	lock_votable(votable);
 
 	client_id = get_client_id(votable, client_str);
@@ -411,7 +416,7 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 		return -EINVAL;
 	}
 
-	/*
+	/* 
 	 * Note that the callback is called with a NULL string and -EINVAL
 	 * result when there are no enabled votes
 	 */
@@ -439,6 +444,11 @@ int rerun_election(struct votable *votable)
 {
 	int rc = 0;
 	int effective_result;
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (IS_ERR_OR_NULL(votable))
+		return -EINVAL;
+#endif
 
 	lock_votable(votable);
 	effective_result = get_effective_result_locked(votable);

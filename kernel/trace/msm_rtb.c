@@ -70,7 +70,7 @@ struct msm_rtb_state {
 };
 
 #if defined(CONFIG_QCOM_RTB_SEPARATE_CPUS)
-DEFINE_PER_CPU(atomic_t, msm_rtb_idx_cpu);
+DEFINE_PER_CPU(atomic_unchecked_t, msm_rtb_idx_cpu);
 #else
 static atomic_t msm_rtb_idx;
 #endif
@@ -174,7 +174,7 @@ static void uncached_logk_timestamp(int idx)
 static int msm_rtb_get_idx(void)
 {
 	int cpu, i, offset;
-	atomic_t *index;
+	atomic_unchecked_t  *index;
 
 	/*
 	 * ideally we would use get_cpu but this is a close enough
@@ -184,7 +184,7 @@ static int msm_rtb_get_idx(void)
 
 	index = &per_cpu(msm_rtb_idx_cpu, cpu);
 
-	i = atomic_add_return(msm_rtb.step_size, index);
+	i = atomic_add_return_unchecked(msm_rtb.step_size, index);
 	i -= msm_rtb.step_size;
 
 	/* Check if index has wrapped around */
@@ -192,7 +192,7 @@ static int msm_rtb_get_idx(void)
 		 ((i - msm_rtb.step_size) & (msm_rtb.nentries - 1));
 	if (offset < 0) {
 		uncached_logk_timestamp(i);
-		i = atomic_add_return(msm_rtb.step_size, index);
+		i = atomic_add_return_unchecked(msm_rtb.step_size, index);
 		i -= msm_rtb.step_size;
 	}
 
@@ -305,8 +305,8 @@ static int msm_rtb_probe(struct platform_device *pdev)
 
 #if defined(CONFIG_QCOM_RTB_SEPARATE_CPUS)
 	for_each_possible_cpu(cpu) {
-		atomic_t *a = &per_cpu(msm_rtb_idx_cpu, cpu);
-		atomic_set(a, cpu);
+		atomic_unchecked_t *a = &per_cpu(msm_rtb_idx_cpu, cpu);
+		atomic_set_unchecked(a, cpu);
 	}
 	msm_rtb.step_size = num_possible_cpus();
 #else

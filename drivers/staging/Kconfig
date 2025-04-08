@@ -110,4 +110,12 @@ source "drivers/staging/wilc1000/Kconfig"
 
 source "drivers/staging/most/Kconfig"
 
+#start: BBSECURE_BUILD
+source "drivers/staging/bbry_secure/Kconfig"
+#end: BBSECURE_BUILD
+
+#start: BBSECURE_VENDOR
+source "drivers/staging/bbry/Kconfig"
+#end: BBSECURE_VENDOR
+
 endif # STAGING

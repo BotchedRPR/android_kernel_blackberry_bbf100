@@ -143,6 +143,7 @@ static int msm_ipc_router_extract_msg(struct msghdr *m,
 			return -EINVAL;
 		}
 		ctl_msg = (union rr_control_msg *)(temp->data);
+		memset(addr, 0x0, sizeof(*addr));
 		addr->family = AF_MSM_IPC;
 		addr->address.addrtype = MSM_IPC_ADDR_ID;
 		addr->address.addr.port_addr.node_id = ctl_msg->cli.node_id;
@@ -151,6 +152,7 @@ static int msm_ipc_router_extract_msg(struct msghdr *m,
 		return offset;
 	}
 	if (addr && (hdr->type == IPC_ROUTER_CTRL_CMD_DATA)) {
+		memset(addr, 0x0, sizeof(*addr));
 		addr->family = AF_MSM_IPC;
 		addr->address.addrtype = MSM_IPC_ADDR_ID;
 		addr->address.addr.port_addr.node_id = hdr->src_node_id;
@@ -233,8 +235,11 @@ int msm_ipc_router_bind(struct socket *sock, struct sockaddr *uaddr,
 		return -EINVAL;
 
 	if (!check_permissions()) {
-		IPC_RTR_ERR("%s: %s Do not have permissions\n",
-			__func__, current->comm);
+                /* MODIFIED-BEGIN by guobing.miao, 2017-09-07,BUG-5299148*/
+                //temp solution for screen on
+		//IPC_RTR_ERR("%s: %s Do not have permissions\n",
+		//	__func__, current->comm);
+		/* MODIFIED-END by guobing.miao,BUG-5299148*/
 		return -EPERM;
 	}
 

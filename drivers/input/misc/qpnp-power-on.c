@@ -132,7 +132,11 @@
 #define QPNP_PON_S3_SRC_KPDPWR_AND_RESIN	2
 #define QPNP_PON_S3_SRC_KPDPWR_OR_RESIN		3
 #define QPNP_PON_S3_SRC_MASK			0x3
+//#ifndef CONFIG_BBRY
 #define QPNP_PON_HARD_RESET_MASK		GENMASK(7, 5)
+//#else
+//#define QPNP_PON_HARD_RESET_MASK		GENMASK(5, 0)
+//#endif
 
 #define QPNP_PON_UVLO_DLOAD_EN			BIT(7)
 #define QPNP_PON_SMPL_EN			BIT(7)
@@ -344,7 +348,8 @@ int qpnp_pon_set_restart_reason(enum pon_restart_reason reason)
 
 	if (!pon->store_hard_reset_reason)
 		return 0;
-
+/* Changes have to be present in bootloader as well to be aligned to BBRY Reset Architecture for this to work */
+//#ifndef CONFIG_BBRY
 	if (is_pon_gen2(pon))
 		rc = qpnp_pon_masked_write(pon, QPNP_PON_SOFT_RB_SPARE(pon),
 					   GENMASK(7, 1), (reason << 1));
@@ -356,6 +361,14 @@ int qpnp_pon_set_restart_reason(enum pon_restart_reason reason)
 		dev_err(&pon->pdev->dev,
 				"Unable to write to addr=%x, rc(%d)\n",
 				QPNP_PON_SOFT_RB_SPARE(pon), rc);
+//#else
+//	rc = qpnp_pon_masked_write(pon, QPNP_PON_XVDD_RB_SPARE(pon),
+//		QPNP_PON_HARD_RESET_MASK, reason);
+//	if (rc)
+//		dev_err(&pon->pdev->dev,
+//			"Unable to write to addr=%x, rc(%d)\n",
+//			QPNP_PON_XVDD_RB_SPARE(pon), rc);
+//#endif
 	return rc;
 }
 EXPORT_SYMBOL(qpnp_pon_set_restart_reason);
@@ -578,7 +591,11 @@ int qpnp_pon_system_pwr_off(enum pon_power_off_type type)
 		goto out;
 
 	list_for_each_entry_safe(pon, tmp, &spon_dev_list, list) {
+#ifdef CONFIG_BBRY
+		dev_info(&pon->pdev->dev,
+#else
 		dev_emerg(&pon->pdev->dev,
+#endif
 				"PMIC@SID%d: configuring PON for reset\n",
 				to_spmi_device(pon->pdev->dev.parent)->usid);
 		rc = qpnp_pon_reset_config(pon, type);
@@ -2358,6 +2375,14 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 	/* config whether store the hard reset reason */
 	pon->store_hard_reset_reason = of_property_read_bool(pdev->dev.of_node,
 					"qcom,store-hard-reset-reason");
+#ifdef CONFIG_BBRY
+	/* Default value */
+	qpnp_pon_set_restart_reason(PON_RESTART_REASON_UNKNOWN);
+
+	/* Set default reset type */
+  	/* Restore to qucalcomm default setting -- 0x85b to 0x00*/
+	//qpnp_pon_system_pwr_off(pwr_off_default_type());
+#endif /* CONFIG_BBRY */
 
 	qpnp_pon_debugfs_init(pdev);
 	return 0;

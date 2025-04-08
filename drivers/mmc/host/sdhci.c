@@ -2984,11 +2984,12 @@ static void sdhci_cmd_irq(struct sdhci_host *host, u32 intmask, u32 *mask)
 #ifdef CONFIG_MMC_DEBUG
 static void sdhci_adma_show_error(struct sdhci_host *host)
 {
+#ifndef CONFIG_TCT_SDM660_COMMON
 	const char *name = mmc_hostname(host->mmc);
 	void *desc = host->adma_table;
-
+#endif
 	sdhci_dumpregs(host);
-
+#ifndef CONFIG_TCT_SDM660_COMMON
 	while (true) {
 		struct sdhci_adma2_64_desc *dma_desc = desc;
 
@@ -3009,6 +3010,7 @@ static void sdhci_adma_show_error(struct sdhci_host *host)
 		if (dma_desc->cmd & cpu_to_le16(ADMA2_END))
 			break;
 	}
+#endif
 }
 #else
 static void sdhci_adma_show_error(struct sdhci_host *host) { }

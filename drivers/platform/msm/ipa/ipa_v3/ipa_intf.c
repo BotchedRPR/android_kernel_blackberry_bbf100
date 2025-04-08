@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -567,6 +567,14 @@ ssize_t ipa3_read(struct file *filp, char __user *buf, size_t count,
 		if (msg) {
 			locked = 0;
 			mutex_unlock(&ipa3_ctx->msg_lock);
+			/* MODIFIED-BEGIN by hongwei.tian, 2019-06-03,BUG-7786810*/
+			if (count < sizeof(struct ipa_msg_meta)) {
+				kfree(msg);
+				msg = NULL;
+				ret = -EFAULT;
+				break;
+			}
+			/* MODIFIED-END by hongwei.tian,BUG-7786810*/
 			if (copy_to_user(buf, &msg->meta,
 					  sizeof(struct ipa_msg_meta))) {
 				ret = -EFAULT;
@@ -577,8 +585,17 @@ ssize_t ipa3_read(struct file *filp, char __user *buf, size_t count,
 			buf += sizeof(struct ipa_msg_meta);
 			count -= sizeof(struct ipa_msg_meta);
 			if (msg->buff) {
-				if (copy_to_user(buf, msg->buff,
-						  msg->meta.msg_len)) {
+				/* MODIFIED-BEGIN by hongwei.tian, 2019-06-03,BUG-7786810*/
+				if (count >= msg->meta.msg_len) {
+					if (copy_to_user(buf, msg->buff,
+							  msg->meta.msg_len)) {
+						ret = -EFAULT;
+						kfree(msg);
+						msg = NULL;
+						break;
+					}
+				} else {
+				/* MODIFIED-END by hongwei.tian,BUG-7786810*/
 					ret = -EFAULT;
 					kfree(msg);
 					msg = NULL;

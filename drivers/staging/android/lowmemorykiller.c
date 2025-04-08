@@ -81,6 +81,12 @@ static int lmk_fast_run = 1;
 
 static unsigned long lowmem_deathpending_timeout;
 
+#ifdef CONFIG_ANDROID_LOW_MEMORY_KILLER_WHITELIST_UIDS
+#define ALMK_WL_MAX	40
+static unsigned int almk_wl_uids[ALMK_WL_MAX];
+static unsigned int almk_wl_len;
+#endif
+
 #define lowmem_print(level, x...)			\
 	do {						\
 		if (lowmem_debug_level >= (level))	\
@@ -105,6 +111,10 @@ module_param_named(adj_max_shift, adj_max_shift, short,
 static int enable_adaptive_lmk;
 module_param_named(enable_adaptive_lmk, enable_adaptive_lmk, int,
 		   S_IRUGO | S_IWUSR);
+
+/* User knob to show lmk trigger count */
+static ulong lowmem_trigger_count = 0;
+module_param_named(count, lowmem_trigger_count, ulong, S_IRUGO | S_IWUSR);
 
 /*
  * This parameter controls the behaviour of LMK when vmpressure is in
@@ -504,6 +514,24 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 			    tasksize <= selected_tasksize)
 				continue;
 		}
+#ifdef CONFIG_ANDROID_LOW_MEMORY_KILLER_WHITELIST_UIDS
+		if (ret == VMPRESSURE_ADJUST_ENCROACH) { // almk trigger
+			int j;
+			int whitelisted = 0;
+			kuid_t p_uid = task_uid(p);
+			for (j = 0; j < almk_wl_len; j++) {
+				kuid_t wl_uid = make_kuid(&init_user_ns, almk_wl_uids[j]);
+				if (uid_eq(p_uid, wl_uid)) {
+					whitelisted = 1;
+					break;
+				}
+			}
+			if (whitelisted) {
+				lowmem_print(1, "ALMK: whitelist for '%s'\n", p->comm);
+				continue;
+			}
+		}
+#endif
 		selected = p;
 		selected_tasksize = tasksize;
 		selected_oom_score_adj = oom_score_adj;
@@ -525,6 +553,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 
 		task_lock(selected);
 		send_sig(SIGKILL, selected, 0);
+		++lowmem_trigger_count;
 		/*
 		 * FIXME: lowmemorykiller shouldn't abuse global OOM killer
 		 * infrastructure. There is no real reason why the selected
@@ -698,4 +727,8 @@ module_param_array_named(minfree, lowmem_minfree, uint, &lowmem_minfree_size,
 			 S_IRUGO | S_IWUSR);
 module_param_named(debug_level, lowmem_debug_level, uint, S_IRUGO | S_IWUSR);
 module_param_named(lmk_fast_run, lmk_fast_run, int, S_IRUGO | S_IWUSR);
+#ifdef CONFIG_ANDROID_LOW_MEMORY_KILLER_WHITELIST_UIDS
+module_param_array_named(whitelist_uids, almk_wl_uids, uint, &almk_wl_len,
+			 S_IRUGO | S_IWUSR);
+#endif
 

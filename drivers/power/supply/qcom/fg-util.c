@@ -399,7 +399,13 @@ int fg_read(struct fg_chip *chip, int addr, u8 *val, int len)
 		return rc;
 	}
 
+/* MODIFIED-BEGIN by jin.wang, 2017-12-22,BUG-5755247*/
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (fg_gen3_debug_mask & FG_BUS_READ) {
+#else
 	if (*chip->debug_mask & FG_BUS_READ) {
+#endif
+/* MODIFIED-END by jin.wang,BUG-5755247*/
 		pr_info("length %d addr=%04x\n", len, addr);
 		for (i = 0; i < len; i++)
 			pr_info("val[%d]: %02x\n", i, val[i]);
@@ -438,7 +444,13 @@ int fg_write(struct fg_chip *chip, int addr, u8 *val, int len)
 		goto out;
 	}
 
+/* MODIFIED-BEGIN by jin.wang, 2017-12-22,BUG-5755247*/
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (fg_gen3_debug_mask & FG_BUS_WRITE) {
+#else
 	if (*chip->debug_mask & FG_BUS_WRITE) {
+#endif
+/* MODIFIED-END by jin.wang,BUG-5755247*/
 		pr_info("length %d addr=%04x\n", len, addr);
 		for (i = 0; i < len; i++)
 			pr_info("val[%d]: %02x\n", i, val[i]);

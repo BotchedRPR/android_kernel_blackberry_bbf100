@@ -307,6 +307,16 @@ static int hiddev_open(struct inode *inode, struct file *file)
 	spin_unlock_irq(&list->hiddev->list_lock);
 
 	mutex_lock(&hiddev->existancelock);
+	/* MODIFIED-BEGIN by hongwei.tian, 2020-02-17,BUG-8871044*/
+	/*
+	 * recheck exist with existance lock held to
+	 * avoid opening a disconnected device
+	 */
+	if (!list->hiddev->exist) {
+		res = -ENODEV;
+		goto bail_unlock;
+	}
+	/* MODIFIED-END by hongwei.tian,BUG-8871044*/
 	if (!list->hiddev->open++)
 		if (list->hiddev->exist) {
 			struct hid_device *hid = hiddev->hid;
@@ -321,6 +331,12 @@ static int hiddev_open(struct inode *inode, struct file *file)
 	return 0;
 bail_unlock:
 	mutex_unlock(&hiddev->existancelock);
+
+	/* MODIFIED-BEGIN by hongwei.tian, 2020-02-17,BUG-8871044*/
+	spin_lock_irq(&list->hiddev->list_lock);
+	list_del(&list->node);
+	spin_unlock_irq(&list->hiddev->list_lock);
+	/* MODIFIED-END by hongwei.tian,BUG-8871044*/
 bail:
 	file->private_data = NULL;
 	vfree(list);
