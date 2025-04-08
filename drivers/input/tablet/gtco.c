@@ -231,7 +231,6 @@ static void parse_hid_report_descriptor(struct gtco *device, char * report,
 
 	/* Walk  this report and pull out the info we need */
 	while (i < length) {
-		/* MODIFIED-BEGIN by hongwei.tian, 2018-04-08,BUG-6168118*/
 		prefix = report[i++];
 
 		/* Determine data size and save the data in the proper variable */
@@ -242,7 +241,7 @@ static void parse_hid_report_descriptor(struct gtco *device, char * report,
 				i + size, length);
 			break;
 		}
-		/* MODIFIED-END by hongwei.tian,BUG-6168118*/
+
 		switch (size) {
 		case 1:
 			data = report[i];
@@ -250,7 +249,7 @@ static void parse_hid_report_descriptor(struct gtco *device, char * report,
 		case 2:
 			data16 = get_unaligned_le16(&report[i]);
 			break;
-		case 4: // MODIFIED by hongwei.tian, 2018-04-08,BUG-6168118
+		case 4:
 			data32 = get_unaligned_le32(&report[i]);
 			break;
 		}
