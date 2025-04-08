@@ -89,6 +89,7 @@
 #include <linux/errqueue.h>
 #include <linux/net_tstamp.h>
 #include <linux/percpu.h>
+#include <linux/refcount.h>
 #ifdef CONFIG_INET
 #include <net/inet_common.h>
 #endif
@@ -1717,7 +1718,7 @@ static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
 	}
 	spin_unlock(&po->bind_lock);
 
-	if (err && !refcount_read(&match->sk_ref)) {
+	if (err && !atomic_read(&match->sk_ref)) {
 		list_del(&match->list);
 		kfree(match);
 	}

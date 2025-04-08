@@ -2451,26 +2451,10 @@ static int smblib_dm_pulse(struct smb_charger *chg)
 	return rc;
 }
 
-static int smblib_force_vbus_voltage(struct smb_charger *chg, u8 val)
-{
-	int rc;
-
-	rc = smblib_masked_write(chg, CMD_HVDCP_2_REG, val, val);
-	if (rc < 0)
-		smblib_err(chg, "Couldn't write to CMD_HVDCP_2_REG rc=%d\n",
-				rc);
-
-	return rc;
-}
-
 int smblib_dp_dm(struct smb_charger *chg, int val)
 {
-#if defined(CONFIG_TCT_SDM660_COMMON)
-	int rc = 0;
-#else
 	int target_icl_ua, rc = 0;
 	union power_supply_propval pval;
-#endif
 
 	switch (val) {
 	case POWER_SUPPLY_DP_DM_DP_PULSE:
@@ -2497,7 +2481,6 @@ int smblib_dp_dm(struct smb_charger *chg, int val)
 				rc, chg->pulse_cnt);
 		break;
 	case POWER_SUPPLY_DP_DM_ICL_DOWN:
-#if !defined(CONFIG_TCT_SDM660_COMMON)
 		target_icl_ua = get_effective_result(chg->usb_icl_votable);
 		if (target_icl_ua < 0) {
 			/* no client vote, get the ICL from charger */
