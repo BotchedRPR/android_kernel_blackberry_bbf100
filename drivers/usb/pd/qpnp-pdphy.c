@@ -27,6 +27,10 @@
 #include <linux/wait.h>
 #include "usbpd.h"
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+#include <linux/power_supply.h>
+#endif
+
 #define USB_PDPHY_MAX_DATA_OBJ_LEN	28
 #define USB_PDPHY_MSG_HDR_LEN		2
 
@@ -766,6 +770,13 @@ static int pdphy_probe(struct platform_device *pdev)
 	unsigned int base;
 	struct usb_pdphy *pdphy;
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (!power_supply_get_by_name("usb")) {
+		pr_err("Could not get USB power_supply, deferring pdphy probe\n");
+		return -EPROBE_DEFER;
+	}
+#endif
+
 	pdphy = devm_kzalloc(&pdev->dev, sizeof(*pdphy), GFP_KERNEL);
 	if (!pdphy)
 		return -ENOMEM;
@@ -886,6 +897,14 @@ static void pdphy_shutdown(struct platform_device *pdev)
 	/* let protocol engine shutdown the pdphy synchronously */
 	if (pdphy->shutdown_cb)
 		pdphy->shutdown_cb(pdphy->usbpd);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (pdphy->is_opened) {
+		pdphy_enable_irq(pdphy, false);
+	}
+	pr_emerg("pdphy shutdown done! \n");
+#endif
+
 }
 
 static const struct of_device_id pdphy_match_table[] = {

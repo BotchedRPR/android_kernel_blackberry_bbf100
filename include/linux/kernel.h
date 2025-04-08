@@ -729,7 +729,7 @@ static inline void ftrace_dump(enum ftrace_dump_mode oops_dump_mode) { }
 #define max(x, y) ({				\
 	typeof(x) _max1 = (x);			\
 	typeof(y) _max2 = (y);			\
-	(void) (&_max1 == &_max2);		\
+	(void) ((void*)&_max1 == (void*)&_max2);		\
 	_max1 > _max2 ? _max1 : _max2; })
 
 #define min3(x, y, z) min((typeof(x))min(x, y), z)

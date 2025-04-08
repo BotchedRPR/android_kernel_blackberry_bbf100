@@ -232,6 +232,11 @@ config USB_F_QDSS
 config USB_F_CCID
 	tristate
 
+# Added by Jin.Wang to support blackberry MFI
+config USB_F_BLACKBERRY
+	tristate
+# Added done.
+
 choice
 	tristate "USB Gadget Drivers"
 	default USB_ETH
@@ -572,6 +577,15 @@ config USB_CONFIGFS_F_CCID
 	help
 	  USB CCID function driver creats transport layer between the
 	  userspace CCID component and the Windows Host.
+
+# Added by Jin.Wang to support blackberry MFI
+config USB_CONFIGFS_F_BLACKBERRY
+	boolean "BLACKBERRY gadget"
+	depends on USB_CONFIGFS
+	select USB_F_BLACKBERRY
+	help
+	  USB gadget blackberry support
+# Added done.
 
 source "drivers/usb/gadget/legacy/Kconfig"
 

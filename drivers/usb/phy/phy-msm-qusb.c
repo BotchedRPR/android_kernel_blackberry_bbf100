@@ -401,7 +401,11 @@ static int qusb_phy_update_dpdm(struct usb_phy *phy, int value)
 		dev_dbg(phy->dev, "POWER_SUPPLY_DP_DM_DPR_DMR\n");
 		mutex_lock(&qphy->phy_lock);
 		if (qphy->rm_pulldown) {
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			{
+#else
 			if (!qphy->cable_connected) {
+#endif
 				if (qphy->tcsr_clamp_dig_n)
 					writel_relaxed(0x0,
 					       qphy->tcsr_clamp_dig_n);
@@ -579,7 +583,11 @@ static int qusb_phy_init(struct usb_phy *phy)
 	 * and try to read EFUSE value only once i.e. not every USB
 	 * cable connect case.
 	 */
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (0) {
+#else
 	if (qphy->tune2_efuse_reg && !tune2) {
+#endif
 		if (!qphy->tune2_val)
 			qusb_phy_get_tune2_param(qphy);
 
@@ -704,9 +712,17 @@ static int qusb_phy_set_suspend(struct usb_phy *phy, int suspend)
 	struct qusb_phy *qphy = container_of(phy, struct qusb_phy, phy);
 	u32 linestate = 0, intr_mask = 0;
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	mutex_lock(&qphy->phy_lock);
+#endif
+
 	if (qphy->suspended && suspend) {
 		dev_dbg(phy->dev, "%s: USB PHY is already suspended\n",
 			__func__);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		mutex_unlock(&qphy->phy_lock);
+#endif
 		return 0;
 	}
 
@@ -758,7 +774,11 @@ static int qusb_phy_set_suspend(struct usb_phy *phy, int suspend)
 
 			qusb_phy_enable_clocks(qphy, false);
 		} else { /* Disconnect case */
+
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 			mutex_lock(&qphy->phy_lock);
+#endif
+
 			/* Disable all interrupts */
 			writel_relaxed(0x00,
 				qphy->base + QUSB2PHY_PORT_INTR_CTRL);
@@ -778,7 +798,10 @@ static int qusb_phy_set_suspend(struct usb_phy *phy, int suspend)
 				qusb_phy_enable_power(qphy, false);
 			else
 				dev_dbg(phy->dev, "race with rm_pulldown. Keep ldo ON\n");
+
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 			mutex_unlock(&qphy->phy_lock);
+#endif
 
 			/*
 			 * Set put_into_high_z_state to true so next USB
@@ -808,6 +831,10 @@ static int qusb_phy_set_suspend(struct usb_phy *phy, int suspend)
 		qphy->suspended = false;
 	}
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	mutex_unlock(&qphy->phy_lock);
+#endif
+
 	return 0;
 }
 
@@ -816,10 +843,19 @@ static int qusb_phy_notify_connect(struct usb_phy *phy,
 {
 	struct qusb_phy *qphy = container_of(phy, struct qusb_phy, phy);
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	mutex_lock(&qphy->phy_lock);
+#endif
+
 	qphy->cable_connected = true;
 
 	dev_dbg(phy->dev, "QUSB PHY: connect notification cable_connected=%d\n",
 							qphy->cable_connected);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	mutex_unlock(&qphy->phy_lock);
+#endif
+
 	return 0;
 }
 
@@ -828,10 +864,19 @@ static int qusb_phy_notify_disconnect(struct usb_phy *phy,
 {
 	struct qusb_phy *qphy = container_of(phy, struct qusb_phy, phy);
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	mutex_lock(&qphy->phy_lock);
+#endif
+
 	qphy->cable_connected = false;
 
 	dev_dbg(phy->dev, "QUSB PHY: connect notification cable_connected=%d\n",
 							qphy->cable_connected);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	mutex_unlock(&qphy->phy_lock);
+#endif
+
 	return 0;
 }
 
@@ -1212,5 +1257,10 @@ static struct platform_driver qusb_phy_driver = {
 
 module_platform_driver(qusb_phy_driver);
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+MODULE_DESCRIPTION("MSM QUSB2 PHY driver for sdm660");
+#else
 MODULE_DESCRIPTION("MSM QUSB2 PHY driver");
+#endif
+
 MODULE_LICENSE("GPL v2");

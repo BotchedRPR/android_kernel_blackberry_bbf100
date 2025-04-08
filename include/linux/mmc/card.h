@@ -159,6 +159,9 @@ struct sd_ssr {
 	unsigned int		au;			/* In sectors */
 	unsigned int		erase_timeout;		/* In milliseconds */
 	unsigned int		erase_offset;		/* In milliseconds */
+#ifdef CONFIG_TCT_SDM660_COMMON
+	unsigned int            speed_class;            /* Class 0 to 10 */
+#endif
 };
 
 struct sd_switch_caps {

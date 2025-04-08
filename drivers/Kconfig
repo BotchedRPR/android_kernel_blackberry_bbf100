@@ -212,4 +212,8 @@ source "drivers/bif/Kconfig"
 
 source "drivers/sensors/Kconfig"
 
+#start: BBSECURE_BIDE
+source "drivers/bide/Kconfig"
+#end: BBSECURE_BIDE
+
 endmenu

@@ -56,6 +56,10 @@
 #include "mdss_smmu.h"
 #include "mdss_mdp.h"
 
+#include "mdss_dsi_cmd.h"
+#include "mdss_dsi.h"
+
+
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MDSS_FB_NUM 3
 #else
@@ -913,6 +917,154 @@ static ssize_t mdss_fb_idle_pc_notify(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "idle power collapsed\n");
 }
 
+static char cmd2_open_code1[2] = {0x00, 0x00};
+static char cmd2_open_code2[4] = {0xff, 0x87, 0x07, 0x01};
+static char cmd2_open_code3[2] = {0x00, 0x80};
+static char cmd2_open_code4[3] = {0xff, 0x87, 0x07};
+static char cmd2_close_code1[2] = {0x00, 0x00};
+static char cmd2_close_code2[4] = {0xff, 0x00, 0x00, 0x00};
+static char cmd2_close_code3[2] = {0x00, 0x80};
+static char cmd2_close_code4[3] = {0xff, 0x00, 0x00};
+static struct dsi_cmd_desc fts_cmd2_open_cmd[] = {
+	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(cmd2_open_code1)}, cmd2_open_code1},
+	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(cmd2_open_code2)}, cmd2_open_code2},
+	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(cmd2_open_code3)}, cmd2_open_code3},
+	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(cmd2_open_code4)}, cmd2_open_code4},
+};
+static struct dsi_cmd_desc fts_cmd2_close_cmd[] = {
+	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(cmd2_close_code1)}, cmd2_close_code1},
+	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(cmd2_close_code2)}, cmd2_close_code2},
+	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(cmd2_close_code3)}, cmd2_close_code3},
+	{{DTYPE_GEN_LWRITE, 1, 0, 0, 0, sizeof(cmd2_close_code4)}, cmd2_close_code4},
+};
+
+void fts_cmd2_enable(struct mdss_dsi_ctrl_pdata *ctrl, bool enable)
+{
+	struct dcs_cmd_req cmdreq;
+	struct mdss_panel_info *pinfo;
+
+	pinfo = &(ctrl->panel_data.panel_info);
+	if (pinfo->dcs_cmd_by_left && ctrl->ndx != DSI_CTRL_LEFT)
+		return;
+
+	memset(&cmdreq, 0, sizeof(cmdreq));
+	if (enable)
+		cmdreq.cmds = fts_cmd2_open_cmd;
+	else
+		cmdreq.cmds = fts_cmd2_close_cmd;
+	cmdreq.cmds_cnt = 4;
+	cmdreq.flags = CMD_REQ_COMMIT | CMD_REQ_LP_MODE;
+	cmdreq.rlen = 0;
+	cmdreq.cb = NULL;
+
+	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+}
+
+static int focaltech_sre_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
+{
+	struct dcs_cmd_req cmdreq;
+	struct dsi_cmd_desc cmds;
+	char cmds_buf[2] = {0};
+	int ret;
+
+	printk("focaltech_sre_enable: enable=%d\n", enable);
+	fts_cmd2_enable(ctrl, true);
+
+	memset(&cmdreq, 0, sizeof(cmdreq));
+	cmds_buf[0] = 0x92;
+	if (enable)
+		cmds_buf[1] = 0xa8;
+	else
+		cmds_buf[1] = 0;
+
+	cmds.dchdr.dtype = 0x15;
+	cmds.dchdr.vc = 0;
+	cmds.dchdr.ack = 0;
+	cmds.dchdr.wait = 0;
+	cmds.dchdr.last = 1;
+	cmds.dchdr.dlen = 2;
+	cmds.payload = cmds_buf;
+
+	cmdreq.cmds = &cmds;
+	cmdreq.cmds_cnt = 1;
+	cmdreq.flags = CMD_REQ_COMMIT | CMD_REQ_LP_MODE;
+	cmdreq.rlen = 0;
+	cmdreq.cb = NULL;
+
+	ret = mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+
+	fts_cmd2_enable(ctrl, false);
+
+	return ret;
+}
+
+static int synaptics_sre_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
+{
+	struct dcs_cmd_req cmdreq;
+	struct dsi_cmd_desc cmds;
+	char cmds_buf[2] = {0};
+	int ret;
+
+	printk("synaptics_sre_enable: enable=%d\n", enable);
+
+	memset(&cmdreq, 0, sizeof(cmdreq));
+	cmds_buf[0] = 0x55;
+	if (enable)
+		cmds_buf[1] = 0x50;
+	else
+		cmds_buf[1] = 0x0;
+
+	cmds.dchdr.dtype = 0x15;
+	cmds.dchdr.vc = 0;
+	cmds.dchdr.ack = 0;
+	cmds.dchdr.wait = 0;
+	cmds.dchdr.last = 1;
+	cmds.dchdr.dlen = 2;
+	cmds.payload = cmds_buf;
+
+	cmdreq.cmds = &cmds;
+	cmdreq.cmds_cnt = 1;
+	cmdreq.flags = CMD_REQ_COMMIT | CMD_REQ_LP_MODE;
+	cmdreq.rlen = 0;
+	cmdreq.cb = NULL;
+
+	ret = mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+
+	return ret;
+}
+
+static ssize_t sre_enable(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = fbi->par;
+	struct mdss_panel_info *pinfo = mfd->panel_info;
+	struct mdss_panel_data *pdata =
+			container_of(pinfo, struct mdss_panel_data, panel_info);
+	char focaltech_lcd_name[] = "Livata video mode dsi panel";
+
+	int enable;
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+	int ret;
+
+	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+						panel_data);
+
+	if (sscanf(buf, "%d", &enable) != 1)
+		return -EINVAL;
+
+	if (enable < 0 || enable > 1)
+		return -EINVAL;
+
+	if (strcmp(pinfo->panel_name, focaltech_lcd_name) == 0)
+		ret = focaltech_sre_enable(ctrl, enable);
+	else
+		ret = synaptics_sre_enable(ctrl, enable);
+
+	return count;
+}
+
+
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO | S_IWUSR, mdss_fb_show_split,
 					mdss_fb_store_split);
@@ -934,6 +1086,8 @@ static DEVICE_ATTR(measured_fps, S_IRUGO | S_IWUSR | S_IWGRP,
 static DEVICE_ATTR(msm_fb_persist_mode, S_IRUGO | S_IWUSR,
 	mdss_fb_get_persist_mode, mdss_fb_change_persist_mode);
 static DEVICE_ATTR(idle_power_collapse, S_IRUGO, mdss_fb_idle_pc_notify, NULL);
+static DEVICE_ATTR(sre_enable, S_IRUGO|S_IRGRP|S_IWUSR|S_IWGRP, NULL, sre_enable);
+
 
 static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
@@ -949,6 +1103,7 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_measured_fps.attr,
 	&dev_attr_msm_fb_persist_mode.attr,
 	&dev_attr_idle_power_collapse.attr,
+	&dev_attr_sre_enable.attr,
 	NULL,
 };
 
@@ -1928,11 +2083,20 @@ static int mdss_fb_blank_unblank(struct msm_fb_data_type *mfd)
 	}
 
 	cur_power_state = mfd->panel_power_state;
+#ifdef CONFIG_TCT_SDM636_LUNA
+	pr_err("Transitioning from %d --> %d\n", cur_power_state,
+		MDSS_PANEL_POWER_ON);
+#else
 	pr_debug("Transitioning from %d --> %d\n", cur_power_state,
 		MDSS_PANEL_POWER_ON);
+#endif
 
 	if (mdss_panel_is_power_on_interactive(cur_power_state)) {
+#ifdef CONFIG_TCT_SDM636_LUNA
+		pr_err("No change in power state\n");
+#else
 		pr_debug("No change in power state\n");
+#endif
 		return 0;
 	}
 
@@ -2118,7 +2282,11 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 		ret = 0;
 		goto end;
 	}
+#ifdef CONFIG_TCT_SDM636_LUNA
+	pr_err("mode: %d\n", blank_mode);
+#else
 	pr_debug("mode: %d\n", blank_mode);
+#endif
 
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 
@@ -2137,6 +2305,9 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 	MDSS_XLOG(blank_mode);
 
 end:
+#ifdef CONFIG_TCT_SDM636_LUNA
+	pr_err("ret=%d\n", ret);
+#endif
 	mutex_unlock(&mfd->mdss_sysfs_lock);
 
 	return ret;

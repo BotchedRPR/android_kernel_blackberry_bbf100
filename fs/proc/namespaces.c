@@ -36,6 +36,9 @@ static const char *proc_ns_follow_link(struct dentry *dentry, void **cookie)
 	const struct proc_ns_operations *ns_ops = PROC_I(inode)->ns_ops;
 	struct task_struct *task;
 	struct path ns_path;
+#if defined(CONFIG_BBSECURE_O_BENEATH) || defined(CONFIG_BBSECURE_O_NOSYMLINK)
+	int err;
+#endif
 	void *error = ERR_PTR(-EACCES);
 
 	task = get_proc_task(inode);
@@ -44,8 +47,18 @@ static const char *proc_ns_follow_link(struct dentry *dentry, void **cookie)
 
 	if (ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS)) {
 		error = ns_get_path(&ns_path, task, ns_ops);
-		if (!error)
+		if (!error){
+#if defined(CONFIG_BBSECURE_O_BENEATH) || defined(CONFIG_BBSECURE_O_NOSYMLINK)
+			err = nd_jump_link(&ns_path);
+			if (err)
+				error = ERR_PTR(err);
+			else
+				error = NULL;
+#else
 			nd_jump_link(&ns_path);
+#endif
+		}
+
 	}
 	put_task_struct(task);
 	return error;

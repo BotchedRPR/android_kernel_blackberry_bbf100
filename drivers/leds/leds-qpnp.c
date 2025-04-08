@@ -365,8 +365,15 @@ struct pwm_config_data {
 	bool	pwm_enabled;
 	bool use_blink;
 	bool blinking;
+/* MODIFIED-BEGIN by junwen.ye, 2017-10-19,BUG-5415486*/
+#if defined(CONFIG_TCT_SDM660_COMMON)
+/* [PLATFORM]-Mod-BEGIN by TCTNB-YJW,5415486, 2017/10/17 */
+	bool	pre_mode;
+	int	origin_duty_pcts[PWM_LUT_MAX_SIZE+1];
+/* [PLATFORM]-Mod-END by YJW */
+#endif
+/* MODIFIED-END by junwen.ye,BUG-5415486*/
 };
-
 /**
  *  wled_config_data - wled configuration data
  *  @num_strings - number of wled strings to be configured
@@ -875,14 +882,25 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 		}
 		if (led->mpp_cfg->pwm_mode == PWM_MODE) {
 			/*config pwm for brightness scaling*/
-			rc = pwm_change_mode(led->mpp_cfg->pwm_cfg->pwm_dev,
-					PM_PWM_MODE_PWM);
-			if (rc < 0) {
-				dev_err(&led->pdev->dev,
-					"Failed to set PWM mode, rc = %d\n",
-					rc);
-				return rc;
-			}
+/* MODIFIED-BEGIN by junwen.ye, 2017-10-19,BUG-5415486*/
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			/* [PLATFORM]-Modified by TCTNB-YJW,5415486, 2017/10/17 */
+                        if (led->mpp_cfg->pwm_cfg->pre_mode != PWM_MODE) {
+#endif
+                                rc = pwm_change_mode(led->mpp_cfg->pwm_cfg->pwm_dev,
+                                                PM_PWM_MODE_PWM);
+                                if (rc < 0) {
+                                        dev_err(&led->pdev->dev,
+                                                "Failed to set PWM mode, rc = %d\n",
+                                                rc);
+                                        return rc;
+                                }
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			/* [PLATFORM]-Modified by TCTNB-YJW,5415486, 2017/10/17 */
+                                led->mpp_cfg->pwm_cfg->pre_mode = PWM_MODE;
+                        }
+#endif
+/* MODIFIED-END by junwen.ye,BUG-5415486*/
 			period_us = led->mpp_cfg->pwm_cfg->pwm_period_us;
 			if (period_us > INT_MAX / NSEC_PER_USEC) {
 				duty_us = (period_us * led->cdev.brightness) /
@@ -1589,14 +1607,25 @@ static int qpnp_kpdbl_set(struct qpnp_led_data *led)
 		}
 
 		if (led->kpdbl_cfg->pwm_cfg->mode == PWM_MODE) {
-			rc = pwm_change_mode(led->kpdbl_cfg->pwm_cfg->pwm_dev,
-					PM_PWM_MODE_PWM);
-			if (rc < 0) {
-				dev_err(&led->pdev->dev,
-					"Failed to set PWM mode, rc = %d\n",
-					rc);
-				return rc;
+/* MODIFIED-BEGIN by junwen.ye, 2017-10-19,BUG-5415486*/
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			/* [PLATFORM]-Modified by TCTNB-YJW,5415486, 2017/10/17 */
+			if (led->kpdbl_cfg->pwm_cfg->pre_mode != PWM_MODE) {
+#endif
+				rc = pwm_change_mode(led->kpdbl_cfg->pwm_cfg->pwm_dev,
+						PM_PWM_MODE_PWM);
+				if (rc < 0) {
+					dev_err(&led->pdev->dev,
+						"Failed to set PWM mode, rc = %d\n",
+						rc);
+					return rc;
+				}
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			/* [PLATFORM]-Modified by TCTNB-YJW,5415486, 2017/10/17 */
+				led->kpdbl_cfg->pwm_cfg->pre_mode = PWM_MODE;
 			}
+#endif
+/* MODIFIED-END by junwen.ye,BUG-5415486*/
 			period_us = led->kpdbl_cfg->pwm_cfg->pwm_period_us;
 			if (period_us > INT_MAX / NSEC_PER_USEC) {
 				duty_us = (period_us * led->cdev.brightness) /
@@ -1707,25 +1736,34 @@ static int qpnp_kpdbl_set(struct qpnp_led_data *led)
 
 	return 0;
 }
-
 static int qpnp_rgb_set(struct qpnp_led_data *led)
 {
 	int rc;
 	int duty_us, duty_ns, period_us;
-
 	if (led->cdev.brightness) {
 		if (!led->rgb_cfg->pwm_cfg->blinking)
 			led->rgb_cfg->pwm_cfg->mode =
 				led->rgb_cfg->pwm_cfg->default_mode;
 		if (led->rgb_cfg->pwm_cfg->mode == PWM_MODE) {
-			rc = pwm_change_mode(led->rgb_cfg->pwm_cfg->pwm_dev,
-					PM_PWM_MODE_PWM);
-			if (rc < 0) {
-				dev_err(&led->pdev->dev,
-					"Failed to set PWM mode, rc = %d\n",
-					rc);
-				return rc;
+/* MODIFIED-BEGIN by junwen.ye, 2017-10-19,BUG-5415486*/
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			/* [PLATFORM]-Modified by TCTNB-YJW,5415486, 2017/10/17 */
+			if (led->rgb_cfg->pwm_cfg->pre_mode != PWM_MODE) {
+#endif
+				rc = pwm_change_mode(led->rgb_cfg->pwm_cfg->pwm_dev,
+						PM_PWM_MODE_PWM);
+				if (rc < 0) {
+					dev_err(&led->pdev->dev,
+						"Failed to set PWM mode, rc = %d\n",
+						rc);
+					return rc;
+				}
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			/* [PLATFORM]-Modified by TCTNB-YJW,5415486, 2017/10/17 */
+				led->rgb_cfg->pwm_cfg->pre_mode = PWM_MODE;
 			}
+#endif
+/* MODIFIED-END by junwen.ye,BUG-5415486*/
 			period_us = led->rgb_cfg->pwm_cfg->pwm_period_us;
 			if (period_us > INT_MAX / NSEC_PER_USEC) {
 				duty_us = (period_us * led->cdev.brightness) /
@@ -1787,7 +1825,11 @@ static void qpnp_led_set(struct led_classdev *led_cdev,
 				enum led_brightness value)
 {
 	struct qpnp_led_data *led;
-
+/* MODIFIED-BEGIN by junwen.ye, 2017-10-19,BUG-5415486*/
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	int idx_len, i; // MODIFIED by junwen.ye, 2017-10-17,BUG-5415486
+#endif
+/* MODIFIED-END by junwen.ye,BUG-5415486*/
 	led = container_of(led_cdev, struct qpnp_led_data, cdev);
 	if (value < LED_OFF) {
 		dev_err(&led->pdev->dev, "Invalid brightness value\n");
@@ -1800,8 +1842,24 @@ static void qpnp_led_set(struct led_classdev *led_cdev,
 	led->cdev.brightness = value;
 	if (led->in_order_command_processing)
 		queue_work(led->workqueue, &led->work);
-	else
+	/* MODIFIED-BEGIN by junwen.ye, 2017-10-19,BUG-5415486*/
+	else {
+#if defined(CONFIG_TCT_SDM660_COMMON)
+/* Modified begin by TCTNB-YJW,BUG-5415486,2017/10/17 */
+		if (led->cdev.brightness > 0)
+		{
+			if (led->id == QPNP_ID_RGB_RED || led->id == QPNP_ID_RGB_GREEN || led->id == QPNP_ID_RGB_BLUE)
+			{
+				idx_len = led->rgb_cfg->pwm_cfg->duty_cycles->num_duty_pcts;
+				for (i = 0; i < idx_len; i++)
+					led->rgb_cfg->pwm_cfg->duty_cycles->duty_pcts[i] = led->rgb_cfg->pwm_cfg->origin_duty_pcts[i] * led->cdev.brightness/255;
+			}
+		}
+/* Modified end by TCTNB-YJW */
+#endif
 		schedule_work(&led->work);
+	}
+	/* MODIFIED-END by junwen.ye,BUG-5415486*/
 }
 
 static void __qpnp_led_work(struct qpnp_led_data *led,
@@ -2160,11 +2218,22 @@ static int qpnp_pwm_init(struct pwm_config_data *pwm_cfg,
 				dev_err(&pdev->dev, "Failed to configure pwm LUT\n");
 				return rc;
 			}
-			rc = pwm_change_mode(pwm_cfg->pwm_dev, PM_PWM_MODE_LPG);
-			if (rc < 0) {
-				dev_err(&pdev->dev, "Failed to set LPG mode\n");
-				return rc;
+/* MODIFIED-BEGIN by junwen.ye, 2017-10-19,BUG-5415486*/
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			/* [PLATFORM]-Modified by TCTNB-YJW,5415486, 2017/10/17 */
+			if (pwm_cfg->pre_mode != LPG_MODE) {
+#endif
+				rc = pwm_change_mode(pwm_cfg->pwm_dev, PM_PWM_MODE_LPG);
+				if (rc < 0) {
+					dev_err(&pdev->dev, "Failed to set LPG mode\n");
+					return rc;
+				}
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			/* [PLATFORM]-Modified by TCTNB-YJW,5415486, 2017/10/17 */
+				pwm_cfg->pre_mode = LPG_MODE;
 			}
+#endif
+/* MODIFIED-END by junwen.ye,BUG-5415486*/
 		}
 	} else {
 		dev_err(&pdev->dev, "Invalid PWM device\n");
@@ -2701,8 +2770,17 @@ static ssize_t blink_store(struct device *dev,
 	if (ret)
 		return ret;
 	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+/* MODIFIED-BEGIN by junwen.ye, 2017-10-19,BUG-5415486*/
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	/* [PLATFORM]-Mod-BEGIN by TCTNB-YJW,5415486, 2017/10/17 */
+	//led->cdev.brightness = blinking ? led->cdev.max_brightness : 0;
+	if (!blinking)
+		led->cdev.brightness = 0;
+	/* [PLATFORM]-Mod-END by YJW */
+#else
 	led->cdev.brightness = blinking ? led->cdev.max_brightness : 0;
-
+#endif
+/* MODIFIED-END by junwen.ye,BUG-5415486*/
 	switch (led->id) {
 	case QPNP_ID_LED_MPP:
 		led_blink(led, led->mpp_cfg->pwm_cfg);
@@ -3680,6 +3758,13 @@ static int qpnp_get_config_rgb(struct qpnp_led_data *led,
 		}
 		led->rgb_cfg->pwm_cfg->mode = led_mode;
 		led->rgb_cfg->pwm_cfg->default_mode = led_mode;
+/* MODIFIED-BEGIN by junwen.ye, 2017-10-19,BUG-5415486*/
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		/* [PLATFORM]-Mod-BEGIN by TCTNB-YJW,5415486, 2017/10/17 */
+		led->rgb_cfg->pwm_cfg->pre_mode = led_mode;
+		/* [PLATFORM]-Mod-END by YJW */
+#endif
+/* MODIFIED-END by junwen.ye,BUG-5415486*/
 	} else {
 		return rc;
 	}
@@ -3869,6 +3954,11 @@ static int qpnp_leds_probe(struct platform_device *pdev)
 	struct qpnp_led_data *led, *led_array;
 	unsigned int base;
 	struct device_node *node, *temp;
+/* MODIFIED-BEGIN by junwen.ye, 2017-10-19,BUG-5415486*/
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	int idx_len; // MODIFIED by junwen.ye, 2017-10-17,BUG-5415486
+#endif
+/* MODIFIED-END by junwen.ye,BUG-5415486*/
 	int rc, i, num_leds = 0, parsed_leds = 0;
 	const char *led_label;
 	bool regulator_probe = false;
@@ -4122,7 +4212,15 @@ static int qpnp_leds_probe(struct platform_device *pdev)
 					goto fail_id_check;
 			}
 		}
-
+/* MODIFIED-BEGIN by junwen.ye, 2017-10-19,BUG-5415486*/
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		/* [PLATFORM]-Mod-BEGIN by TCTNB-YJW,5415486, 2017/10/17 */
+		idx_len = led->rgb_cfg->pwm_cfg->duty_cycles->num_duty_pcts;
+		for (i = 0; i < idx_len; i++)
+			led->rgb_cfg->pwm_cfg->origin_duty_pcts[i] = led->rgb_cfg->pwm_cfg->duty_cycles->duty_pcts[i];
+		/* [PLATFORM]-Mod-END by YJW */
+#endif
+/* MODIFIED-END by junwen.ye,BUG-5415486*/
 		/* configure default state */
 		if (led->default_on) {
 			led->cdev.brightness = led->cdev.max_brightness;
@@ -4271,4 +4369,5 @@ module_exit(qpnp_led_exit);
 MODULE_DESCRIPTION("QPNP LEDs driver");
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("leds:leds-qpnp");
+
 

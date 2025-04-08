@@ -53,6 +53,9 @@ enum dual_role_property {
 	DUAL_ROLE_PROP_PR,
 	DUAL_ROLE_PROP_DR,
 	DUAL_ROLE_PROP_VCONN_SUPPLY,
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	DUAL_ROLE_PROP_STATE,
+#endif
 };
 
 struct dual_role_phy_instance;

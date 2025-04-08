@@ -28,7 +28,15 @@
 #define NETLINK_RDMA		20
 #define NETLINK_CRYPTO		21	/* Crypto layer */
 #define NETLINK_SOCKEV		22	/* Socket Administrative Events */
+#ifdef CONFIG_BBSECURE_PATHTRUST
+#define NETLINK_PATHTRUST	23 /* Pathtrust */
+#endif /* CONFIG_BBSECURE_PATHTRUST */
 #define NETLINK_INET_DIAG	NETLINK_SOCK_DIAG
+/* start:BBSECURE_BIDE */
+#ifdef CONFIG_BBSECURE_BIDE
+#define NETLINK_QSEECOM		24 /* QSEECOM */
+#endif
+/* end:BBSECURE_BIDE */
 
 #define MAX_LINKS 32		
 

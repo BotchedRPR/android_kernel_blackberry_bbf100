@@ -1849,6 +1849,12 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 		start = ktime_get();
 		/* issue device SoftReset */
 		dwc3_writel(dwc->regs, DWC3_DCTL, reg | DWC3_DCTL_CSFTRST);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		/* Makes sure that above write goes through */
+		wmb();
+#endif
+
 		do {
 			reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 			if (!(reg & DWC3_DCTL_CSFTRST))
@@ -1890,6 +1896,11 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 	}
 
 	dwc3_writel(dwc->regs, DWC3_DCTL, reg);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	/* Makes sure that above write goes through */
+	wmb();
+#endif
 
 	do {
 		reg = dwc3_readl(dwc->regs, DWC3_DSTS);
@@ -2018,9 +2029,15 @@ static int dwc3_gadget_vbus_session(struct usb_gadget *_gadget, int is_active)
 	if (!dwc->is_drd)
 		return -EPERM;
 
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 	is_active = !!is_active;
+#endif
 
 	spin_lock_irqsave(&dwc->lock, flags);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	is_active = !!is_active;
+#endif
 
 	/* Mark that the vbus was powered */
 	dwc->vbus_active = is_active;

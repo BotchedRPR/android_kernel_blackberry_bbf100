@@ -42,6 +42,7 @@
 #include <asm/tlbflush.h>
 #include <asm/edac.h>
 #include <soc/qcom/scm.h>
+#include <asm-generic/sections.h>
 
 #include <trace/events/exception.h>
 
@@ -181,9 +182,18 @@ static void __do_kernel_fault(struct mm_struct *mm, unsigned long addr,
 	 * No handler, we'll have to terminate things with extreme prejudice.
 	 */
 	bust_spinlocks(1);
-	pr_alert("Unable to handle kernel %s at virtual address %08lx\n",
-		 (addr < PAGE_SIZE) ? "NULL pointer dereference" :
-		 "paging request", addr);
+	printk(KERN_ALERT "Unable to handle kernel ");
+	if (addr < PAGE_SIZE)
+		printk(KERN_CONT "NULL pointer dereference");
+#ifdef CONFIG_PROTECTED_VARS
+	else if (addr >= (unsigned long)__start_protected &&
+		 addr < (unsigned long)__end_protected)
+		printk(KERN_CONT "write to protected variable");
+#endif
+	else
+		printk(KERN_CONT "paging request");
+
+	printk(KERN_CONT " at virtual address %08lx\n", addr);
 
 	show_pte(mm, addr);
 	die("Oops", regs, esr);
@@ -219,6 +229,34 @@ static void __do_user_fault(struct task_struct *tsk, unsigned long addr,
 	si.si_addr = (void __user *)addr;
 	force_sig_info(sig, &si, tsk);
 }
+
+#ifdef CONFIG_PAX_PAGEEXEC
+void pax_report_insns(struct pt_regs *regs, void *pc, void *sp)
+{
+        long i;
+
+        printk(KERN_ERR "PAX: bytes at PC: ");
+        for (i = 0; i < 5; i++) {
+                uint32_t c;
+                if (get_user(c, (__force uint32_t __user *)pc+i))
+                        printk(KERN_CONT "???????? ");
+                else
+                        printk(KERN_CONT "%08x ", c);
+        }
+        printk("\n");
+
+        printk(KERN_ERR "PAX: bytes at SP-4: ");
+        for (i = -1; i < 20; i++) {
+                unsigned long c;
+                if (get_user(c, (__force unsigned long __user *)sp+i))
+                        printk(KERN_CONT "???????????????? ");
+                else
+                        printk(KERN_CONT "%016lx ", c);
+        }
+        printk("\n");
+}
+#endif
+
 
 static void do_bad_area(unsigned long addr, unsigned int esr, struct pt_regs *regs)
 {

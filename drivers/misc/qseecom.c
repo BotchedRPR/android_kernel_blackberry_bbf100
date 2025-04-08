@@ -43,6 +43,20 @@
 #include <linux/msm-bus-board.h>
 #include <soc/qcom/qseecomi.h>
 #include <asm/cacheflush.h>
+/* start:BBSECURE_BIDE */
+#ifdef CONFIG_BBSECURE_BIDE
+#include <linux/qseecom_netlink.h>
+#include <linux/init.h>
+#include <linux/module.h>
+#include <linux/version.h>
+#include <net/net_namespace.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+#include <net/netlink.h>
+#else
+#include <linux/netlink.h>
+#endif
+#endif /* CONFIG_BBSECURE_BIDE */
+/* end:BBSECURE_BIDE */
 #include "qseecom_legacy.h"
 #include "qseecom_kernel.h"
 #include <crypto/ice.h>
@@ -139,6 +153,12 @@ enum qseecom_ce_hw_instance {
 
 static struct class *driver_class;
 static dev_t qseecom_device_no;
+
+/* start:BBSECURE_BIDE */
+#ifdef CONFIG_BBSECURE_BIDE
+static struct sock *qscnl;
+#endif
+/* end:BBSECURE_BIDE */
 
 static DEFINE_MUTEX(qsee_bw_mutex);
 static DEFINE_MUTEX(app_access_lock);
@@ -1207,7 +1227,6 @@ static int qseecom_register_listener(struct qseecom_dev_handle *data,
 		return -ENOMEM;
 	}
 
-	data->listener.id = rcvd_lstnr.listener_id;
 	init_waitqueue_head(&new_entry->rcv_req_wq);
 	init_waitqueue_head(&new_entry->listener_block_app_wq);
 	new_entry->send_resp_flag = 0;
@@ -1215,6 +1234,7 @@ static int qseecom_register_listener(struct qseecom_dev_handle *data,
 	spin_lock_irqsave(&qseecom.registered_listener_list_lock, flags);
 	list_add_tail(&new_entry->list, &qseecom.registered_listener_list_head);
 	spin_unlock_irqrestore(&qseecom.registered_listener_list_lock, flags);
+	data->listener.id = rcvd_lstnr.listener_id;
 
 	return ret;
 }
@@ -1228,6 +1248,11 @@ static int qseecom_unregister_listener(struct qseecom_dev_handle *data)
 	struct qseecom_registered_listener_list *ptr_svc = NULL;
 	struct qseecom_command_scm_resp resp;
 	struct ion_handle *ihandle = NULL;		/* Retrieve phy addr */
+
+	if (data->released) {
+		pr_err("Don't unregister lsnr %d\n", data->listener.id);
+		return -EINVAL;
+	}
 
 	req.qsee_cmd_id = QSEOS_DEREGISTER_LISTENER;
 	req.listener_id = data->listener.id;
@@ -2613,6 +2638,14 @@ static int qseecom_unload_app(struct qseecom_dev_handle *data,
 		goto unload_exit;
 	}
 
+	#ifdef CONFIG_BBRY
+	#define BBRY_APP_NAME	"blackber"
+	if (!memcmp(data->client.app_name, BBRY_APP_NAME, sizeof(BBRY_APP_NAME))) {
+		pr_debug("Do not unload blackberry app from tz\n");
+		return 0;
+	}
+	#endif
+
 	__qseecom_cleanup_app(data);
 	__qseecom_reentrancy_check_if_no_app_blocked(TZ_OS_APP_SHUTDOWN_ID);
 
@@ -3318,6 +3351,35 @@ int __boundary_checks_offset(struct qseecom_send_modfd_cmd_req *req,
 	return 0;
 }
 
+/* MODIFIED-BEGIN by hongwei.tian, 2020-10-09,BUG-10015863*/
+static int __boundary_checks_offset_64(struct qseecom_send_modfd_cmd_req *req,
+			struct qseecom_send_modfd_listener_resp *lstnr_resp,
+			struct qseecom_dev_handle *data, int i)
+{
+
+	if ((data->type != QSEECOM_LISTENER_SERVICE) &&
+						(req->ifd_data[i].fd > 0)) {
+		if ((req->cmd_req_len < sizeof(uint64_t)) ||
+			(req->ifd_data[i].cmd_buf_offset >
+			req->cmd_req_len - sizeof(uint64_t))) {
+			pr_err("Invalid offset (req len) 0x%x\n",
+				req->ifd_data[i].cmd_buf_offset);
+			return -EINVAL;
+		}
+	} else if ((data->type == QSEECOM_LISTENER_SERVICE) &&
+					(lstnr_resp->ifd_data[i].fd > 0)) {
+		if ((lstnr_resp->resp_len < sizeof(uint64_t)) ||
+			(lstnr_resp->ifd_data[i].cmd_buf_offset >
+			lstnr_resp->resp_len - sizeof(uint64_t))) {
+			pr_err("Invalid offset (lstnr resp len) 0x%x\n",
+				lstnr_resp->ifd_data[i].cmd_buf_offset);
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+/* MODIFIED-END by hongwei.tian,BUG-10015863*/
+
 static int __qseecom_update_cmd_buf(void *msg, bool cleanup,
 			struct qseecom_dev_handle *data)
 {
@@ -3675,7 +3737,7 @@ static int __qseecom_update_cmd_buf_64(void *msg, bool cleanup,
 		sg = sg_ptr->sgl;
 		if (sg_ptr->nents == 1) {
 			uint64_t *update_64bit;
-			if (__boundary_checks_offset(req, lstnr_resp, data, i))
+			if (__boundary_checks_offset_64(req, lstnr_resp, data, i)) // MODIFIED by hongwei.tian, 2020-10-09,BUG-10015863
 				goto err;
 				/* 64bit app uses 64bit address */
 			update_64bit = (uint64_t *) field;
@@ -4447,6 +4509,69 @@ static int qseecom_unload_commonlib_image(void)
 	return ret;
 }
 
+/* start:BBSECURE_BIDE */
+#ifdef CONFIG_BBSECURE_BIDE
+static int __init qseecom_nl_init(void)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+	struct netlink_kernel_cfg cfg = {
+			.groups	= QSCNLGRP_MAX,
+			.flags	= 0,
+		};
+	qscnl = netlink_kernel_create(&init_net, NETLINK_QSEECOM, &cfg);
+#else
+	qscnl = netlink_kernel_create(&init_net, NETLINK_QSEECOM,
+			QSCNLGRP_MAX, NULL, NULL, THIS_MODULE);
+#endif
+	if (qscnl == NULL)
+		pr_err("cannot create netlink socket\n");
+	else
+		pr_info("netlink socket created\n");
+	return 0;
+}
+
+static void qseecom_nl_notify(int msgtype)
+{
+	int len;
+	sk_buff_data_t tmp;
+	struct sk_buff *skb;
+	struct nlmsghdr *nlh;
+
+	/* Assumes netlink messages have no payload */
+	len = 0;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+	skb = nlmsg_new(len, GFP_KERNEL);
+#else
+	skb = alloc_skb(NLMSG_SPACE(len), GFP_KERNEL);
+#endif
+	if (!skb)
+		goto oom;
+
+	tmp = skb->tail;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+	nlh = nlmsg_put(skb, 0, 0, msgtype, len, 0);
+#else
+	nlh = NLMSG_PUT(skb, 0, 0, msgtype, len);
+#endif
+	if (!nlh)
+		goto nlmsg_failure;
+
+	nlh->nlmsg_len = skb->tail - tmp;
+	NETLINK_CB(skb).dst_group = QSCNLGRP_ALL;
+	netlink_broadcast(qscnl, skb, 0, QSCNLGRP_ALL, GFP_KERNEL);
+	return;
+
+nlmsg_failure:
+	kfree_skb(skb);
+	return;
+oom:
+	pr_err("out of memory in %s\n", __func__);
+	return;
+}
+#endif /* CONFIG_BBSECURE_BIDE */
+/* end:BBSECURE_BIDE */
+
 int qseecom_start_app(struct qseecom_handle **handle,
 						char *app_name, uint32_t size)
 {
@@ -4459,7 +4584,11 @@ int qseecom_start_app(struct qseecom_handle **handle,
 	bool found_app = false;
 	size_t len;
 	ion_phys_addr_t pa;
+/* start:BBSECURE_BIDE */
+#ifndef CONFIG_BBSECURE_BIDE
 	uint32_t fw_size, app_arch;
+#endif
+/* end:BBSECURE_BIDE */
 	uint32_t app_id = 0;
 
 	if (atomic_read(&qseecom.qseecom_state) != QSEECOM_STATE_READY) {
@@ -4556,12 +4685,21 @@ int qseecom_start_app(struct qseecom_handle **handle,
 		entry->app_id = app_id;
 		entry->ref_cnt = 1;
 		strlcpy(entry->app_name, app_name, MAX_APP_NAME_SIZE);
+/* start:BBSECURE_BIDE */
+#ifndef CONFIG_BBSECURE_BIDE
 		if (__qseecom_get_fw_size(app_name, &fw_size, &app_arch)) {
 			ret = -EIO;
 			kfree(entry);
 			goto err;
 		}
 		entry->app_arch = app_arch;
+#else
+		/* On BlackBerry devices the TrustZone applet may not exist as
+		   a file as it was burned into the image. We hardcode the architecture
+		   as right now all of the trustzone applets are 32 bit. */
+		entry->app_arch = ELFCLASS32;
+#endif /* CONFIG_BBSECURE_BIDE */
+/* end:BBSECURE_BIDE */
 		entry->app_blocked = false;
 		entry->blocked_on_listener_id = 0;
 		spin_lock_irqsave(&qseecom.registered_app_list_lock, flags);
@@ -6471,9 +6609,13 @@ static int __qseecom_update_qteec_req_buf(struct qseecom_qteec_modfd_req *req,
 				pr_err("Ion client can't retrieve the handle\n");
 				return -ENOMEM;
 			}
-			if ((req->req_len < sizeof(uint32_t)) ||
+			/* MODIFIED-BEGIN by hongwei.tian, 2020-10-09,BUG-10015863*/
+			if ((req->req_len <
+				sizeof(struct qseecom_param_memref)) ||
 				(req->ifd_data[i].cmd_buf_offset >
-				req->req_len - sizeof(uint32_t))) {
+				req->req_len -
+				sizeof(struct qseecom_param_memref))) {
+				/* MODIFIED-END by hongwei.tian,BUG-10015863*/
 				pr_err("Invalid offset/req len 0x%x/0x%x\n",
 					req->req_len,
 					req->ifd_data[i].cmd_buf_offset);
@@ -8739,6 +8881,12 @@ static int qseecom_probe(struct platform_device *pdev)
 		pr_err("Unable to register bus client\n");
 
 	atomic_set(&qseecom.qseecom_state, QSEECOM_STATE_READY);
+
+/* start:BBSECURE_BIDE */
+#ifdef CONFIG_BBSECURE_BIDE
+	qseecom_nl_notify(QSCNL_MSG_INIT_DONE);
+#endif
+/* start:BBSECURE_BIDE */
 	return 0;
 
 exit_deinit_clock:
@@ -8778,6 +8926,7 @@ exit_unreg_chrdev_region:
 static int qseecom_remove(struct platform_device *pdev)
 {
 	struct qseecom_registered_kclient_list *kclient = NULL;
+	struct qseecom_registered_kclient_list *kclient_tmp = NULL;
 	unsigned long flags = 0;
 	int ret = 0;
 	int i;
@@ -8787,10 +8936,8 @@ static int qseecom_remove(struct platform_device *pdev)
 	atomic_set(&qseecom.qseecom_state, QSEECOM_STATE_NOT_READY);
 	spin_lock_irqsave(&qseecom.registered_kclient_list_lock, flags);
 
-	list_for_each_entry(kclient, &qseecom.registered_kclient_list_head,
-								list) {
-		if (!kclient)
-			goto exit_irqrestore;
+	list_for_each_entry_safe(kclient, kclient_tmp,
+		&qseecom.registered_kclient_list_head, list) {
 
 		/* Break the loop if client handle is NULL */
 		if (!kclient->handle)
@@ -8814,7 +8961,7 @@ exit_free_kc_handle:
 	kzfree(kclient->handle);
 exit_free_kclient:
 	kzfree(kclient);
-exit_irqrestore:
+
 	spin_unlock_irqrestore(&qseecom.registered_kclient_list_lock, flags);
 
 	if (qseecom.qseos_version > QSEEE_VERSION_00)
@@ -9022,6 +9169,12 @@ static void qseecom_exit(void)
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Qualcomm Secure Execution Environment Communicator");
+
+/* start:BBSECURE_BIDE */
+#ifdef CONFIG_BBSECURE_BIDE
+postcore_initcall(qseecom_nl_init);
+#endif
+/* end:BBSECURE_BIDE */
 
 module_init(qseecom_init);
 module_exit(qseecom_exit);

@@ -1536,6 +1536,10 @@ static void android_disconnect(struct usb_gadget *gadget)
 	struct usb_composite_dev        *cdev = get_gadget_data(gadget);
 	struct gadget_info *gi;
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	unsigned long flags;
+#endif
+
 	if (!cdev) {
 		pr_err("%s: gadget is not connected\n", __func__);
 		return;
@@ -1551,9 +1555,19 @@ static void android_disconnect(struct usb_gadget *gadget)
 #ifdef CONFIG_USB_CONFIGFS_F_ACC
 	acc_disconnect();
 #endif
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	spin_lock_irqsave(&cdev->lock, flags);
+#endif
+
 	gi->connected = 0;
 	if (!gi->unbinding)
 		schedule_work(&gi->work);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	spin_unlock_irqrestore(&cdev->lock, flags);
+#endif
+
 	composite_disconnect(gadget);
 }
 #endif

@@ -988,6 +988,11 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 	}
 
 mapped:
+	/* MODIFIED-BEGIN by hongwei.tian, 2020-11-17,BUG-10203219*/
+	if (!bit)
+	    goto ignore;
+	    /* MODIFIED-END by hongwei.tian,BUG-10203219*/
+
 	if (device->driver->input_mapped && device->driver->input_mapped(device,
 				hidinput, field, usage, &bit, &max) < 0)
 		goto ignore;

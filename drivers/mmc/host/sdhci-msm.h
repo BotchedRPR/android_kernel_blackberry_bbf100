@@ -76,6 +76,11 @@ struct sdhci_pinctrl_data {
 	struct pinctrl          *pctrl;
 	struct pinctrl_state    *pins_active;
 	struct pinctrl_state    *pins_sleep;
+/* [PLATFORM]-Mod-BEGIN by YuBin, sim/sd gpio */
+#ifdef CONFIG_TCT_SDM660_COMMON
+	struct pinctrl_state    *pins_onetime;
+#endif
+/* [PLATFORM]-Mod-BEGIN by YuBin */
 };
 
 struct sdhci_msm_bus_voting_data {

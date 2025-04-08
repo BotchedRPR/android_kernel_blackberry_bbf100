@@ -1,6 +1,7 @@
 /*
  * Based on arch/arm/kernel/setup.c
  *
+ * Copyright (C) 2017 BlackBerry Limited
  * Copyright (C) 1995-2001 Russell King
  * Copyright (C) 2012 ARM Ltd.
  *
@@ -305,7 +306,10 @@ void __init __weak init_random_pool(void) { }
 void __init setup_arch(char **cmdline_p)
 {
 	pr_info("Boot CPU: AArch64 Processor [%08x]\n", read_cpuid_id());
-
+#ifdef CONFIG_BBRY_DEBUG
+	// This print is to support automated testing of KASLR in debug build
+	pr_info("KASLR: kernel offset of setup_arch @ %p\n", setup_arch);
+#endif
 	sprintf(init_utsname()->machine, ELF_PLATFORM);
 	init_mm.start_code = (unsigned long) _text;
 	init_mm.end_code   = (unsigned long) _etext;

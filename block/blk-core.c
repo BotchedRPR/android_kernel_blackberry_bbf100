@@ -883,6 +883,7 @@ blk_init_allocated_queue(struct request_queue *q, request_fn_proc *rfn,
 
 fail:
 	blk_free_flush_queue(q->fq);
+	q->fq = NULL; // [TCTNB-SYS][SECURITY_PATCH] Added by Alvin.Lee for XR8676273 on 2019/12/10
 	return NULL;
 }
 EXPORT_SYMBOL(blk_init_allocated_queue);

@@ -45,7 +45,10 @@ module_param(record_size, ulong, 0400);
 MODULE_PARM_DESC(record_size,
 		"size of each dump done on oops/panic");
 
-static ulong ramoops_console_size = MIN_MEM_SIZE;
+// [FEATURE]-Add-BEGIN by TCLNB.huaidi.feng,2017/09/19, enable pstore function task-5345652
+//static ulong ramoops_console_size = MIN_MEM_SIZE;
+static ulong ramoops_console_size = 1024*1024UL;
+// [FEATURE]-Add-END by TCLNB.huaidi.feng
 module_param_named(console_size, ramoops_console_size, ulong, 0400);
 MODULE_PARM_DESC(console_size, "size of kernel console log");
 
@@ -57,12 +60,27 @@ static ulong ramoops_pmsg_size = MIN_MEM_SIZE;
 module_param_named(pmsg_size, ramoops_pmsg_size, ulong, 0400);
 MODULE_PARM_DESC(pmsg_size, "size of user space message log");
 
+#ifdef CONFIG_BBRY
+// BBRY uses rese_cause for kmsg collection, do not use TCL changes in this file.
 static ulong mem_address;
+#else
+// [FEATURE]-Add-BEGIN by TCLNB.huaidi.feng,2017/09/19, enable pstore function task-5345652
+//static ulong mem_address;
+static ulong mem_address =0xffe00000;
+// [FEATURE]-Add-END by TCLNB.huaidi.feng
+#endif
 module_param(mem_address, ulong, 0400);
 MODULE_PARM_DESC(mem_address,
 		"start of reserved RAM used to store oops/panic logs");
 
+#ifdef CONFIG_BBRY
 static ulong mem_size;
+#else
+// [FEATURE]-Add-BEGIN by TCLNB.huaidi.feng,2017/09/19, enable pstore function task-5345652
+//static ulong mem_size;
+static ulong mem_size = 0x200000;
+// [FEATURE]-Add-END by TCLNB.huaidi.feng
+#endif
 module_param(mem_size, ulong, 0400);
 MODULE_PARM_DESC(mem_size,
 		"size of reserved RAM used to store oops/panic logs");

@@ -120,6 +120,15 @@
  */
 #define ELF_ET_DYN_BASE		0x100000000UL
 
+#ifdef CONFIG_PAX_ASLR
+
+#define PAX_ELF_ET_DYN_BASE     (test_thread_flag(TIF_32BIT) ? 0x10000UL : 0x80000000UL)
+
+#define PAX_DELTA_MMAP_LEN      (test_thread_flag(TIF_32BIT) ? 16 : 26)
+#define PAX_DELTA_STACK_LEN     (test_thread_flag(TIF_32BIT) ? 16 : 26)
+#endif
+
+
 #ifndef __ASSEMBLY__
 
 typedef unsigned long elf_greg_t;

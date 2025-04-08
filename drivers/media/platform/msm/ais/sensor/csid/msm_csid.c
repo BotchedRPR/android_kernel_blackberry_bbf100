@@ -62,7 +62,12 @@
 #define FALSE  0
 
 #define MAX_LANE_COUNT 4
+
+#ifdef CONFIG_BBRY
+#define CSID_TIMEOUT msecs_to_jiffies(500)
+#else
 #define CSID_TIMEOUT msecs_to_jiffies(100)
+#endif
 
 #undef CDBG
 #ifdef CONFIG_MSM_AIS_DEBUG
@@ -769,8 +774,10 @@ static int32_t msm_csid_cmd(struct csid_device *csid_dev, void *arg)
 			unsigned char cid = csid_params.lut_params.vc_cfg_a[i].
 									cid;
 
-			csid_dev->current_csid_params.lut_params.vc_cfg_a[cid] =
-					csid_params.lut_params.vc_cfg_a[i];
+			if (cid < MAX_CID)
+				csid_dev->current_csid_params.lut_params.
+				vc_cfg_a[cid] = csid_params.lut_params.
+				vc_cfg_a[i];
 
 			CDBG("vc_cfg_a[%d] : dt=%d, decode_fmt=%d",
 				csid_params.lut_params.vc_cfg_a[i].cid,
@@ -808,8 +815,10 @@ static int32_t msm_csid_cmd(struct csid_device *csid_dev, void *arg)
 			unsigned char cid = csid_params.lut_params.vc_cfg_a[i].
 						cid;
 
-			csid_dev->current_csid_params.lut_params.vc_cfg_a[cid] =
-				csid_params.lut_params.vc_cfg_a[i];
+			if (cid < MAX_CID)
+				csid_dev->current_csid_params.lut_params.
+				vc_cfg_a[cid] = csid_params.lut_params.
+				vc_cfg_a[i];
 
 			CDBG("vc_cfg_a[%d] : dt=%d, decode_fmt=%d",
 				csid_params.lut_params.vc_cfg_a[i].cid,

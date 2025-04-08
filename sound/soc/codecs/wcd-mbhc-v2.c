@@ -9,6 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#define DEBUG // MODIFIED by hongwei.tian, 2017-12-13,BUG-5760547
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/slab.h>
@@ -56,6 +57,8 @@
 #define WCD_MBHC_SPL_HS_CNT  1
 
 static int det_extn_cable_en;
+
+
 module_param(det_extn_cable_en, int,
 		S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(det_extn_cable_en, "enable/disable extn cable detect");
@@ -66,7 +69,12 @@ enum wcd_mbhc_cs_mb_en_flag {
 	WCD_MBHC_EN_PULLUP,
 	WCD_MBHC_EN_NONE,
 };
-
+/* MODIFIED-BEGIN by hongwei.tian, 2018-01-10,BUG-5867922*/
+#ifdef CONFIG_TCT_SDM660_COMMON
+extern void msm_swap_hph_switch_status(struct snd_soc_codec *codec);
+int hph_in_detecting;
+#endif
+/* MODIFIED-END by hongwei.tian,BUG-5867922*/
 static void wcd_mbhc_jack_report(struct wcd_mbhc *mbhc,
 				struct snd_soc_jack *jack, int status, int mask)
 {
@@ -533,6 +541,12 @@ static void wcd_mbhc_set_and_turnoff_hph_padac(struct wcd_mbhc *mbhc)
 
 	WCD_MBHC_REG_READ(WCD_MBHC_HPH_CNP_WG_TIME, wg_time);
 	wg_time += 1;
+#if defined(CONFIG_TCT_SDM636_LUNA)
+		if(mbhc->mbhc_cb->is_hphr_spk_on && mbhc->mbhc_cb->is_hphr_spk_on(mbhc)){
+			pr_debug("%s ext spk in ON need keep HPH open !\n", __func__);
+			return;
+		}
+#endif
 
 	/* If headphone PA is on, check if userspace receives
 	* removal event to sync-up PA's state */
@@ -705,9 +719,14 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 						WCD_MBHC_ELECT_DETECTION_TYPE,
 						0);
 				usleep_range(200, 210);
-				wcd_mbhc_hs_elec_irq(mbhc,
-						     WCD_MBHC_ELEC_HS_REM,
-						     true);
+				/* MODIFIED-BEGIN by hongwei.tian, 2017-12-13,BUG-5760547*/
+                        #ifdef CONFIG_TCT_SDM660_COMMON
+				if(!mbhc->is_selfie_stick_insert)
+                        #endif
+					wcd_mbhc_hs_elec_irq(mbhc,
+							     WCD_MBHC_ELEC_HS_REM,
+							     true);
+							     /* MODIFIED-END by hongwei.tian,BUG-5760547*/
 			}
 			mbhc->hph_status &= ~(SND_JACK_HEADSET |
 						SND_JACK_LINEOUT |
@@ -735,6 +754,12 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 
 		if (mbhc->mbhc_cb->hph_pa_on_status)
 			is_pa_on = mbhc->mbhc_cb->hph_pa_on_status(codec);
+		/* MODIFIED-BEGIN by hongwei.tian, 2017-12-13,BUG-5760547*/
+        #ifdef CONFIG_TCT_SDM660_COMMON
+		if(mbhc->is_selfie_stick_insert)
+			mbhc->jiffies_atreport = jiffies;
+        #endif
+			/* MODIFIED-END by hongwei.tian,BUG-5760547*/
 
 		if (mbhc->impedance_detect &&
 			mbhc->mbhc_cb->compute_impedance &&
@@ -890,7 +915,14 @@ static void wcd_mbhc_find_plug_and_report(struct wcd_mbhc *mbhc,
 						SND_JACK_HEADPHONE);
 			if (mbhc->current_plug == MBHC_PLUG_TYPE_HEADSET)
 				wcd_mbhc_report_plug(mbhc, 0, SND_JACK_HEADSET);
+#ifdef CONFIG_TCT_SDM660_COMMON
+		mbhc->is_selfie_stick_insert = true; // MODIFIED by hongwei.tian, 2017-12-13,BUG-5760547
+#endif
+#if  defined(CONFIG_TCT_SDM636_LUNA)
+		wcd_mbhc_report_plug(mbhc, 1, SND_JACK_HEADSET);
+#else
 		wcd_mbhc_report_plug(mbhc, 1, SND_JACK_UNSUPPORTED);
+#endif
 	} else if (plug_type == MBHC_PLUG_TYPE_HEADSET) {
 		if (mbhc->mbhc_cfg->enable_anc_mic_detect)
 			anc_mic_found = wcd_mbhc_detect_anc_plug_type(mbhc);
@@ -905,7 +937,11 @@ static void wcd_mbhc_find_plug_and_report(struct wcd_mbhc *mbhc,
 		 */
 		wcd_mbhc_report_plug(mbhc, 1, jack_type);
 	} else if (plug_type == MBHC_PLUG_TYPE_HIGH_HPH) {
+        #ifdef CONFIG_TCT_SDM660_COMMON
+		if (mbhc->mbhc_cfg->detect_extn_cable && !mbhc->is_selfie_stick_insert) { // MODIFIED by hongwei.tian, 2017-12-13,BUG-5760547
+        #else
 		if (mbhc->mbhc_cfg->detect_extn_cable) {
+        #endif
 			/* High impedance device found. Report as LINEOUT */
 			wcd_mbhc_report_plug(mbhc, 1, SND_JACK_LINEOUT);
 			pr_debug("%s: setup mic trigger for further detection\n",
@@ -955,6 +991,7 @@ static int wcd_check_cross_conn(struct wcd_mbhc *mbhc)
 			return false;
 
 	WCD_MBHC_REG_READ(WCD_MBHC_ELECT_SCHMT_ISRC, reg1);
+	pr_debug("%s: ISRC_res  0x%x\n", __func__, reg1); // MODIFIED by hongwei.tian, 2018-01-10,BUG-5867922
 	/*
 	 * Check if there is any cross connection,
 	 * Micbias and schmitt trigger (HPHL-HPHR)
@@ -965,9 +1002,10 @@ static int wcd_check_cross_conn(struct wcd_mbhc *mbhc)
 	 */
 	wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_SCHMT_ISRC, 2);
-
+	/* MODIFIED-BEGIN by hongwei.tian, 2018-01-10,BUG-5867922*/
 	WCD_MBHC_REG_READ(WCD_MBHC_ELECT_RESULT, swap_res);
-	pr_debug("%s: swap_res%x\n", __func__, swap_res);
+	pr_debug("%s: swap_res  0x%x\n", __func__, swap_res);
+	/* MODIFIED-END by hongwei.tian,BUG-5867922*/
 
 	/*
 	 * Read reg hphl and hphr schmitt result with cross connection
@@ -1138,6 +1176,17 @@ static void wcd_enable_mbhc_supply(struct wcd_mbhc *mbhc,
 							WCD_MBHC_EN_CS);
 		} else if (plug_type == MBHC_PLUG_TYPE_HEADPHONE) {
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_CS);
+		/* MODIFIED-BEGIN by hongwei.tian, 2017-12-13,BUG-5760547*/
+        #ifdef CONFIG_TCT_SDM660_COMMON
+		} else if (mbhc->is_selfie_stick_insert){
+				if (mbhc->mbhc_cfg->swap_gnd_mic_reset &&
+					mbhc->mbhc_cfg->swap_gnd_mic_reset(codec)) {
+						pr_debug("%s: US_EU gpio present,flip switch again\n"
+							, __func__);
+				}
+				wcd_enable_curr_micbias(mbhc,WCD_MBHC_EN_MB);
+				/* MODIFIED-END by hongwei.tian,BUG-5760547*/
+        #endif
 		} else {
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_NONE);
 		}
@@ -1237,6 +1286,7 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 	WCD_MBHC_REG_READ(WCD_MBHC_BTN_RESULT, btn_result);
 	WCD_MBHC_REG_READ(WCD_MBHC_HS_COMP_RESULT, hs_comp_res);
 
+	pr_debug("%s: hs_comp_res: %x btn_result : %x selfie_stick : %x \n", __func__, hs_comp_res,btn_result,mbhc->is_selfie_stick_insert); // MODIFIED by hongwei.tian, 2017-12-13,BUG-5760547
 	if (!rc) {
 		pr_debug("%s No btn press interrupt\n", __func__);
 		if (!btn_result && !hs_comp_res)
@@ -1251,6 +1301,17 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 		else
 			plug_type = MBHC_PLUG_TYPE_INVALID;
 	}
+
+
+	/* MODIFIED-BEGIN by hongwei.tian, 2017-12-13,BUG-5760547*/
+#ifdef CONFIG_TCT_SDM660_COMMON
+	if(mbhc->is_selfie_stick_insert)
+	{
+		pr_debug("%s: stick plug type is %d\n",__func__, plug_type);
+		goto report;
+	}
+#endif
+	/* MODIFIED-END by hongwei.tian,BUG-5760547*/
 
 	do {
 		cross_conn = wcd_check_cross_conn(mbhc);
@@ -1275,6 +1336,7 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 		WCD_MBHC_RSC_LOCK(mbhc);
 		wcd_mbhc_find_plug_and_report(mbhc, plug_type);
 		WCD_MBHC_RSC_UNLOCK(mbhc);
+		pr_debug("%s: early report plug type is %d\n",__func__, plug_type); // MODIFIED by hongwei.tian, 2018-01-25,BUG-5929027
 	}
 
 correct_plug_type:
@@ -1398,6 +1460,7 @@ correct_plug_type:
 
 		WCD_MBHC_REG_READ(WCD_MBHC_HPHL_SCHMT_RESULT, hphl_sch);
 		WCD_MBHC_REG_READ(WCD_MBHC_MIC_SCHMT_RESULT, mic_sch);
+		pr_debug("%s: hs_comp_res : %x  hphl_sch: %x mic_sch : %x \n", __func__, hs_comp_res , hphl_sch , mic_sch); // MODIFIED by hongwei.tian, 2017-12-13,BUG-5760547
 		if (hs_comp_res && !(hphl_sch || mic_sch)) {
 			pr_debug("%s: cable is extension cable\n", __func__);
 			plug_type = MBHC_PLUG_TYPE_HIGH_HPH;
@@ -1525,6 +1588,7 @@ exit:
 								MIC_BIAS_2);
 	}
 
+#ifndef CONFIG_TCT_SDM660_COMMON
 	if (mbhc->mbhc_cfg->detect_extn_cable &&
 	    ((plug_type == MBHC_PLUG_TYPE_HEADPHONE) ||
 	     (plug_type == MBHC_PLUG_TYPE_HEADSET)) &&
@@ -1533,6 +1597,7 @@ exit:
 		wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_REM, true);
 		WCD_MBHC_RSC_UNLOCK(mbhc);
 	}
+#endif
 	if (mbhc->mbhc_cb->set_cap_mode)
 		mbhc->mbhc_cb->set_cap_mode(codec, micbias1, micbias2);
 
@@ -1540,6 +1605,16 @@ exit:
 		mbhc->mbhc_cb->hph_pull_down_ctrl(codec, true);
 
 	mbhc->mbhc_cb->lock_sleep(mbhc, false);
+/* MODIFIED-BEGIN by hongwei.tian, 2018-01-10,BUG-5867922*/
+#ifdef CONFIG_TCT_SDM660_COMMON
+	if(mbhc->mbhc_cfg->swap_hph_switch_reset)
+	{
+		mbhc->mbhc_cfg->swap_hph_switch_reset(codec,0);
+		pr_debug("%s: PHP detecting done ! Set to AKM side \n",__func__); // MODIFIED by hongwei.tian, 2018-01-25,BUG-5929027
+	}
+	hph_in_detecting = 0;
+#endif
+/* MODIFIED-END by hongwei.tian,BUG-5867922*/
 	pr_debug("%s: leave\n", __func__);
 }
 
@@ -1573,7 +1648,9 @@ static void wcd_mbhc_detect_plug_type(struct wcd_mbhc *mbhc)
 	wcd_schedule_hs_detect_plug(mbhc, &mbhc->correct_plug_swch);
 	pr_debug("%s: leave\n", __func__);
 }
-
+#if  defined(CONFIG_TCT_SDM636_LUNA)
+extern unsigned char aw87319_audio_off(void);
+#endif
 static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 {
 	bool detection_type = 0;
@@ -1585,7 +1662,7 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 	WCD_MBHC_RSC_LOCK(mbhc);
 
 	mbhc->in_swch_irq_handler = true;
-
+	msm_swap_hph_switch_status(codec); // MODIFIED by hongwei.tian, 2018-01-10,BUG-5867922
 	/* cancel pending button press */
 	if (wcd_cancel_btn_work(mbhc))
 		pr_debug("%s: button press is canceled\n", __func__);
@@ -1606,7 +1683,40 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 
 	if ((mbhc->current_plug == MBHC_PLUG_TYPE_NONE) &&
 	    detection_type) {
+/* MODIFIED-BEGIN by hongwei.tian, 2018-01-10,BUG-5867922*/
+#ifdef CONFIG_TCT_SDM660_COMMON
+		if(mbhc->mbhc_cfg->swap_hph_switch_reset)
+		{
+			hph_in_detecting = 1;
+			mbhc->mbhc_cfg->swap_hph_switch_reset(codec,1);
+		}
+#endif
+/* MODIFIED-END by hongwei.tian,BUG-5867922*/
 		/* Make sure MASTER_BIAS_CTL is enabled */
+		/* MODIFIED-BEGIN by hongwei.tian, 2018-01-08,BUG-5860103*/
+#if  defined(CONFIG_TCT_SDM636_LUNA)
+		if(mbhc->mbhc_cb->is_hphr_spk_on && mbhc->mbhc_cb->is_hphr_spk_on(mbhc)){
+			if (wcd_mbhc_is_hph_pa_on(mbhc)) {
+				u8 wg_time = 0;
+
+				aw87319_audio_off();
+				WCD_MBHC_REG_READ(WCD_MBHC_HPH_CNP_WG_TIME, wg_time);
+				wg_time += 1;
+				pr_debug("%s PA is on, setting PA_OFF_ACK\n", __func__);
+				WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_HPHL_OCP_DET_EN, 0);
+				WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_HPHL_PA_EN, 0);
+				WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_HPHR_OCP_DET_EN, 0);
+				WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_HPHR_PA_EN, 0);
+				usleep_range(wg_time * 1000, wg_time * 1000 + 50);
+				pr_debug("%s HPHR off \n", __func__);
+			} 
+		}
+		if(mbhc->mbhc_cfg->codec_hph_switch_cb)
+		{
+			mbhc->mbhc_cfg->codec_hph_switch_cb(codec,1);
+		}
+#endif
+		/* MODIFIED-END by hongwei.tian,BUG-5860103*/
 		mbhc->mbhc_cb->mbhc_bias(codec, true);
 
 		if (mbhc->mbhc_cb->mbhc_common_micb_ctrl)
@@ -1631,6 +1741,9 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 			mbhc->mbhc_cb->enable_mb_source(mbhc, true);
 		mbhc->btn_press_intr = false;
 		mbhc->is_btn_press = false;
+        #ifdef CONFIG_TCT_SDM660_COMMON
+		mbhc->is_selfie_stick_insert = false; // MODIFIED by hongwei.tian, 2017-12-13,BUG-5760547
+        #endif
 		wcd_mbhc_detect_plug_type(mbhc);
 	} else if ((mbhc->current_plug != MBHC_PLUG_TYPE_NONE)
 			&& !detection_type) {
@@ -1649,6 +1762,9 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 
 		mbhc->btn_press_intr = false;
 		mbhc->is_btn_press = false;
+        #ifdef CONFIG_TCT_SDM660_COMMON
+		mbhc->is_selfie_stick_insert = false; // MODIFIED by hongwei.tian, 2017-12-13,BUG-5760547
+        #endif
 		if (mbhc->current_plug == MBHC_PLUG_TYPE_HEADPHONE) {
 			wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_REM,
 					     false);
@@ -1732,6 +1848,11 @@ static int wcd_mbhc_get_button_mask(struct wcd_mbhc *mbhc)
 
 	btn = mbhc->mbhc_cb->map_btn_code_to_num(mbhc->codec);
 
+	/* MODIFIED-BEGIN by hongwei.tian, 2017-11-30,BUG-5706622*/
+	if(mbhc->mbhc_cfg->key_code[btn] == 0)
+		return 0;
+		/* MODIFIED-END by hongwei.tian,BUG-5706622*/
+
 	switch (btn) {
 	case 0:
 		mask = SND_JACK_BTN_0;
@@ -1798,6 +1919,15 @@ static irqreturn_t wcd_mbhc_hs_ins_irq(int irq, void *data)
 						WCD_MBHC_ELECT_SCHMT_ISRC,
 						0);
 				msleep(20);
+				/* MODIFIED-BEGIN by hongwei.tian, 2017-12-13,BUG-5760547*/
+                #ifdef CONFIG_TCT_SDM660_COMMON
+				if(mic_trigerred >50)
+				{
+					mbhc->is_selfie_stick_insert = true;
+					goto determine_plug;
+				}
+                #endif
+				/* MODIFIED-END by hongwei.tian,BUG-5760547*/
 				WCD_MBHC_REG_UPDATE_BITS(
 						WCD_MBHC_ELECT_SCHMT_ISRC,
 						1);
@@ -2034,7 +2164,11 @@ static irqreturn_t wcd_mbhc_btn_press_handler(int irq, void *data)
 	if (mask == SND_JACK_BTN_0)
 		mbhc->btn_press_intr = true;
 
+#ifdef CONFIG_TCT_SDM660_COMMON
+	if (mbhc->current_plug != MBHC_PLUG_TYPE_HEADSET && !mbhc->is_selfie_stick_insert) { // MODIFIED by hongwei.tian, 2017-12-13,BUG-5760547
+#else
 	if (mbhc->current_plug != MBHC_PLUG_TYPE_HEADSET) {
+#endif
 		pr_debug("%s: Plug isn't headset, ignore button press\n",
 				__func__);
 		goto done;
@@ -2840,7 +2974,11 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 	mbhc->is_extn_cable = false;
 	mbhc->hph_type = WCD_MBHC_HPH_NONE;
 	mbhc->wcd_mbhc_regs = wcd_mbhc_regs;
-
+/* MODIFIED-BEGIN by hongwei.tian, 2018-01-10,BUG-5867922*/
+#ifdef CONFIG_TCT_SDM660_COMMON
+	hph_in_detecting = 0;
+#endif
+/* MODIFIED-END by hongwei.tian,BUG-5867922*/
 	if (mbhc->intr_ids == NULL) {
 		pr_err("%s: Interrupt mapping not provided\n", __func__);
 		return -EINVAL;

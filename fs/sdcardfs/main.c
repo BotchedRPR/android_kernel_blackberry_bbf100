@@ -16,6 +16,8 @@
  * This file is dual licensed.  It may be redistributed and/or modified
  * under the terms of the Apache 2.0 License OR version 2 of the GNU
  * General Public License.
+ *
+ * Copyright (C) 2018 BlackBerry Limited. All rights reserved.
  */
 
 #include "sdcardfs.h"
@@ -30,6 +32,9 @@ enum {
 	Opt_debug,
 	Opt_mask,
 	Opt_multiuser,
+#ifdef CONFIG_BBSECURE_SDBASE
+	Opt_primary_only,
+#endif /* CONFIG_BBSECURE_SDBASE */
 	Opt_userid,
 	Opt_reserved_mb,
 	Opt_gid_derivation,
@@ -44,16 +49,40 @@ static const match_table_t sdcardfs_tokens = {
 	{Opt_mask, "mask=%u"},
 	{Opt_userid, "userid=%d"},
 	{Opt_multiuser, "multiuser"},
+#ifdef CONFIG_BBSECURE_SDAFW
+	{Opt_primary_only, "primary_only=%s"},
+#elif defined(CONFIG_BBSECURE_SDBASE)
+	{Opt_primary_only, "primary_only"},
+#endif /* CONFIG_BBSECURE_SDBASE || CONFIG_BBSECURE_SDAFW */
 	{Opt_gid_derivation, "derive_gid"},
 	{Opt_reserved_mb, "reserved_mb=%u"},
 	{Opt_err, NULL}
 };
 
+#ifdef CONFIG_BBSECURE_SDAFW
+enum {
+	Opt_sdcardfs_sd,
+	Opt_sdcardfs_otg,
+
+	Opt_sdcardfs_err
+};
+
+static const match_table_t sdcardfs_primary_only_tokens = {
+	{ Opt_sdcardfs_sd, "sd" },
+	{ Opt_sdcardfs_otg, "otg" },
+
+	{ Opt_sdcardfs_err, NULL }
+};
+
+#endif /* CONFIG_BBSECURE_SDAFW */
 static int parse_options(struct super_block *sb, char *options, int silent,
 				int *debug, struct sdcardfs_vfsmount_options *vfsopts,
 				struct sdcardfs_mount_options *opts)
 {
 	char *p;
+#ifdef CONFIG_BBSECURE_SDAFW
+	char *string;
+#endif /* CONFIG_BBSECURE_SDAFW */
 	substring_t args[MAX_OPT_ARGS];
 	int option;
 
@@ -62,6 +91,11 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 	opts->fs_low_gid = AID_MEDIA_RW;
 	vfsopts->mask = 0;
 	opts->multiuser = false;
+#ifdef CONFIG_BBSECURE_SDAFW
+	memset(opts->primary_only, 0, sizeof(opts->primary_only));
+#elif defined(CONFIG_BBSECURE_SDBASE)
+	opts->primary_only = false;
+#endif /* CONFIG_BBSECURE_SDBASE || CONFIG_BBSECURE_SDAFW */
 	opts->fs_user_id = 0;
 	vfsopts->gid = 0;
 	/* by default, 0MB is reserved */
@@ -114,6 +148,31 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 		case Opt_multiuser:
 			opts->multiuser = true;
 			break;
+#ifdef CONFIG_BBSECURE_SDAFW
+		case Opt_primary_only:
+			string = match_strdup(args);
+			if (string == NULL)
+				return 0;
+			token = match_token(string,
+						sdcardfs_primary_only_tokens, args);
+			switch (token) {
+				case Opt_sdcardfs_sd:
+					strlcpy(opts->primary_only, "sd", 3);
+					break;
+				case Opt_sdcardfs_otg:
+					strlcpy(opts->primary_only, "otg", 4);
+					break;
+				default:
+					kfree(string);
+					return 0;
+			}
+			kfree(string);
+			break;
+#elif defined(CONFIG_BBSECURE_SDBASE)
+		case Opt_primary_only:
+			opts->primary_only = true;
+			break;
+#endif /* CONFIG_BBSECURE_SDBASE */
 		case Opt_reserved_mb:
 			if (match_int(&args[0], &option))
 				return 0;
@@ -176,6 +235,9 @@ int parse_options_remount(struct super_block *sb, char *options, int silent,
 			vfsopts->mask = option;
 			break;
 		case Opt_multiuser:
+#ifdef CONFIG_BBSECURE_SDBASE
+		case Opt_primary_only:
+#endif /* CONFIG_BBSECURE_SDBASE */
 		case Opt_userid:
 		case Opt_fsuid:
 		case Opt_fsgid:
@@ -309,7 +371,7 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 	sb->s_root = d_make_root(inode);
 	if (!sb->s_root) {
 		err = -ENOMEM;
-		goto out_iput;
+		goto out_sput;
 	}
 	d_set_d_op(sb->s_root, &sdcardfs_ci_dops);
 
@@ -334,13 +396,11 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 	mutex_lock(&sdcardfs_super_list_lock);
 	if (sb_info->options.multiuser) {
 		setup_derived_state(d_inode(sb->s_root), PERM_PRE_ROOT,
-				sb_info->options.fs_user_id, AID_ROOT,
-				false, SDCARDFS_I(d_inode(sb->s_root))->data);
+				sb_info->options.fs_user_id, AID_ROOT);
 		snprintf(sb_info->obbpath_s, PATH_MAX, "%s/obb", dev_name);
 	} else {
 		setup_derived_state(d_inode(sb->s_root), PERM_ROOT,
-				sb_info->options.fs_user_id, AID_ROOT,
-				false, SDCARDFS_I(d_inode(sb->s_root))->data);
+				sb_info->options.fs_user_id, AID_ROOT);
 		snprintf(sb_info->obbpath_s, PATH_MAX, "%s/Android/obb", dev_name);
 	}
 	fixup_tmp_permissions(d_inode(sb->s_root));
@@ -356,8 +416,7 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 	/* no longer needed: free_dentry_private_data(sb->s_root); */
 out_freeroot:
 	dput(sb->s_root);
-out_iput:
-	iput(inode);
+	sb->s_root = NULL;
 out_sput:
 	/* drop refs we took earlier */
 	atomic_dec(&lower_sb->s_active);
@@ -417,7 +476,7 @@ void sdcardfs_kill_sb(struct super_block *sb)
 {
 	struct sdcardfs_sb_info *sbi;
 
-	if (sb->s_magic == SDCARDFS_SUPER_MAGIC) {
+	if (sb->s_magic == SDCARDFS_SUPER_MAGIC && sb->s_fs_info) {
 		sbi = SDCARDFS_SB(sb);
 		mutex_lock(&sdcardfs_super_list_lock);
 		list_del(&sbi->list);

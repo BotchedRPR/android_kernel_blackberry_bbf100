@@ -121,4 +121,10 @@ static int __init selnl_init(void)
 	return 0;
 }
 
+// start:BBSECURE_BIDE
+#ifdef CONFIG_BBSECURE_BIDE
+postcore_initcall(selnl_init);
+#else
 __initcall(selnl_init);
+#endif
+// end:BBSECURE_BIDE

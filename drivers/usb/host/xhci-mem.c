@@ -2292,7 +2292,10 @@ static void xhci_add_in_port(struct xhci_hcd *xhci, unsigned int num_ports,
 		if (temp & XHCI_HLC) {
 			xhci_dbg_trace(xhci, trace_xhci_dbg_init,
 					"xHCI 1.0: support USB2 hardware lpm");
+
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 			xhci->hw_lpm_support = 1;
+#endif
 		}
 	}
 

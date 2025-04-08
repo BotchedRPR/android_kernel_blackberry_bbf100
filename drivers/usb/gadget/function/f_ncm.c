@@ -27,6 +27,12 @@
 #include "u_ether_configfs.h"
 #include "u_ncm.h"
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+static int out_max_datagrams=0;
+module_param(out_max_datagrams, int, S_IRUGO|S_IWUSR);
+MODULE_PARM_DESC(out_max_datagrams, "Override the wNtbOutMaxDatagrams value for OUT bundling");
+#endif
+
 /*
  * This function is a "CDC Network Control Model" (CDC NCM) Ethernet link.
  * NCM is intended to be used with high-speed network attachments.
@@ -134,6 +140,9 @@ static struct usb_cdc_ncm_ntb_parameters ntb_parameters = {
 	.wNdpOutDivisor = cpu_to_le16(4),
 	.wNdpOutPayloadRemainder = cpu_to_le16(0),
 	.wNdpOutAlignment = cpu_to_le16(4),
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	.wNtbOutMaxDatagrams = cpu_to_le16(0),
+#endif
 };
 
 /*
@@ -529,6 +538,7 @@ static inline unsigned get_ncm(__le16 **p, unsigned size)
 static inline void ncm_reset_values(struct f_ncm *ncm)
 {
 	ncm->parser_opts = &ndp16_opts;
+	ncm->ndp_sign = ncm->parser_opts->ndp_sign; // MODIFIED by Wu Yan, 2017-12-21,BUG-5779746
 	ncm->is_crc = false;
 	ncm->port.cdc_filter = DEFAULT_FILTER;
 
@@ -537,6 +547,9 @@ static inline void ncm_reset_values(struct f_ncm *ncm)
 
 	ncm->port.fixed_out_len = le32_to_cpu(ntb_parameters.dwNtbOutMaxSize);
 	ncm->port.fixed_in_len = NTB_DEFAULT_IN_SIZE;
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	ntb_parameters.wNtbOutMaxDatagrams = cpu_to_le16(out_max_datagrams);
+#endif
 }
 
 /*
@@ -1152,6 +1165,14 @@ err:
 	if (ncm->skb_tx_ndp)
 		dev_kfree_skb_any(ncm->skb_tx_ndp);
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (skb2)
+		dev_kfree_skb_any(skb2);
+
+	ncm->skb_tx_data = NULL;
+	ncm->skb_tx_ndp = NULL;
+#endif
+
 	return NULL;
 }
 
@@ -1311,7 +1332,16 @@ static int ncm_unwrap_ntb(struct gether *port,
 			skb2 = netdev_alloc_skb_ip_align(ncm->netdev,
 							 dg_len - crc_len);
 			if (skb2 == NULL)
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			{
+				INFO(port->func.config->cdev,
+					"No memory for skb_clone\n");
+#endif
 				goto err;
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			}
+#endif
+
 			memcpy(skb_put(skb2, dg_len - crc_len),
 			       skb->data + index, dg_len - crc_len);
 

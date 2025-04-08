@@ -3906,8 +3906,11 @@ int mdss_mdp_enable_panel_disable_mode(struct msm_fb_data_type *mfd,
 	}
 
 	pdata = dev_get_platdata(&mfd->pdev->dev);
-
+#ifdef CONFIG_TCT_SDM636_LUNA
+	pr_err("config panel %d\n", disable_panel);
+#else
 	pr_debug("config panel %d\n", disable_panel);
+#endif
 	if (disable_panel) {
 		/* first set the flag that we enter this mode */
 		pdata->panel_disable_mode = true;

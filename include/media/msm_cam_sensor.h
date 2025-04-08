@@ -250,6 +250,10 @@ struct msm_flash_cfg_data_t32 {
 	enum msm_flash_cfg_type_t cfg_type;
 	int32_t flash_current[MAX_LED_TRIGGERS];
 	int32_t flash_duration[MAX_LED_TRIGGERS];
+#ifdef CONFIG_BBRY
+	int32_t flash_mitigation_level;
+	int32_t torch_mitigation_level;
+#endif /* CONFIG_BBRY */
 	union {
 		compat_uptr_t flash_init_info;
 		compat_uptr_t settings;

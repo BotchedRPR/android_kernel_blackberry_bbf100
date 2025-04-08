@@ -285,7 +285,14 @@ static void __exit sha256_generic_mod_fini(void)
 	crypto_unregister_shashes(sha256_algs, ARRAY_SIZE(sha256_algs));
 }
 
+// start:BBSECURE_BIDE
+#ifdef CONFIG_BBSECURE_BIDE
+postcore_initcall(sha256_generic_mod_init);
+#else
 module_init(sha256_generic_mod_init);
+#endif
+// end:BBSECURE_BIDE
+
 module_exit(sha256_generic_mod_fini);
 
 MODULE_LICENSE("GPL");

@@ -682,11 +682,16 @@ static void cleanup_stats(struct lpm_stats *stats)
 {
 	struct list_head *centry = NULL;
 	struct lpm_stats *pos = NULL;
+	/* MODIFIED-BEGIN by hongwei.tian, 2018-07-07,BUG-6554265*/
+	struct lpm_stats *n = NULL;
 
 	centry = &stats->child;
-	list_for_each_entry_reverse(pos, centry, sibling) {
-		if (!list_empty(&pos->child))
+	list_for_each_entry_safe_reverse(pos, n, centry, sibling) {
+		if (!list_empty(&pos->child)) {
 			cleanup_stats(pos);
+			continue;
+		}
+		/* MODIFIED-END by hongwei.tian,BUG-6554265*/
 
 		list_del_init(&pos->child);
 

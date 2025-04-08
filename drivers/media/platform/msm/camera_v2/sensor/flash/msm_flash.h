@@ -25,6 +25,11 @@
 #define DEFINE_MSM_MUTEX(mutexname) \
 	static struct mutex mutexname = __MUTEX_INITIALIZER(mutexname)
 
+#ifdef CONFIG_BBRY
+#define NUM_FLASH_THERMAL_LEVELS 13
+#define NUM_TORCH_THERMAL_LEVELS 2
+#endif /* CONFIG_BBRY */
+
 enum msm_camera_flash_state_t {
 	MSM_CAMERA_FLASH_INIT,
 	MSM_CAMERA_FLASH_OFF,
@@ -102,6 +107,18 @@ struct msm_flash_ctrl_t {
 
 	/* flash state */
 	enum msm_camera_flash_state_t flash_state;
+
+#ifdef CONFIG_BBRY
+	uint32_t flash_current[MAX_LED_TRIGGERS];
+	uint32_t flash_limits[NUM_FLASH_THERMAL_LEVELS];
+	uint32_t flash_thermal_limit;
+	uint32_t total_flash_current;
+	uint32_t torch_current[MAX_LED_TRIGGERS];
+	uint32_t torch_limits[NUM_TORCH_THERMAL_LEVELS];
+	uint32_t torch_thermal_limit;
+	uint32_t total_torch_current;
+	enum msm_flash_cfg_type_t current_flash_cfg;
+#endif /* CONFIG_BBRY */
 };
 
 int msm_flash_i2c_probe(struct i2c_client *client,
@@ -124,4 +141,10 @@ int msm_flash_led_release(struct msm_flash_ctrl_t *fctrl);
 int msm_flash_led_off(struct msm_flash_ctrl_t *fctrl);
 int msm_flash_led_low(struct msm_flash_ctrl_t *fctrl);
 int msm_flash_led_high(struct msm_flash_ctrl_t *fctrl);
+#ifdef CONFIG_BBRY
+static void msm_flash_apply_thermal_limit_torch(struct msm_flash_ctrl_t *fctrl);
+static void msm_flash_apply_thermal_limit_flash(struct msm_flash_ctrl_t *fctrl);
+static int32_t msm_flash_config_thermal_limits(struct msm_flash_ctrl_t *fctrl,
+	struct msm_flash_cfg_data_t *flash_data);
+#endif /* CONFIG_BBRY */
 #endif

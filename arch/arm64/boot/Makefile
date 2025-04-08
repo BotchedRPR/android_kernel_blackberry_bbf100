@@ -25,6 +25,9 @@ DTB_OBJS := $(shell find -L $(obj)/dts/ -name \*.dtb)
 endif
 
 $(obj)/Image: vmlinux FORCE
+ifdef CONFIG_DOES_NOT_RUN
+	$(error Error: CONFIG_DO_NOT_RUN set.  Will not create bootable image)
+endif
 	$(call if_changed,objcopy)
 
 $(obj)/Image.bz2: $(obj)/Image FORCE

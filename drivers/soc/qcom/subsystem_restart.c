@@ -49,6 +49,10 @@ module_param(disable_restart_work, uint, S_IRUGO | S_IWUSR);
 static int enable_debug;
 module_param(enable_debug, int, S_IRUGO | S_IWUSR);
 
+#ifdef CONFIG_MSM_SUBSYSTEM_RESTART
+char subsystem_panic[16];
+#endif
+
 /* The maximum shutdown timeout is the product of MAX_LOOPS and DELAY_MS. */
 #define SHUTDOWN_ACK_MAX_LOOPS	100
 #define SHUTDOWN_ACK_DELAY_MS	100
@@ -176,6 +180,9 @@ struct subsys_device {
 	dev_t dev_no;
 	struct completion err_ready;
 	enum crash_status crashed;
+#ifdef CONFIG_BBRY
+	bool supress_ramdump;
+#endif
 	int notif_state;
 	struct list_head list;
 };
@@ -1005,8 +1012,17 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 	track->p_state = SUBSYS_RESTARTING;
 	spin_unlock_irqrestore(&track->s_lock, flags);
 
+#ifdef CONFIG_BBRY
+	if (dev->supress_ramdump)
+		pr_info("Expected modem reset, do not collect ram dumps for %s\n", desc->name);
+	else {
+		/* Collect ram dumps for all subsystems in order here */
+		for_each_subsys_device(list, count, NULL, subsystem_ramdump);
+	}
+#else
 	/* Collect ram dumps for all subsystems in order here */
 	for_each_subsys_device(list, count, NULL, subsystem_ramdump);
+#endif
 
 	for_each_subsys_device(list, count, NULL, subsystem_free_memory);
 
@@ -1092,7 +1108,10 @@ int subsystem_restart_dev(struct subsys_device *dev)
 	}
 
 	name = dev->desc->name;
-
+#ifdef CONFIG_MSM_SUBSYSTEM_RESTART
+	memset(subsystem_panic, 0, sizeof(subsystem_panic));
+	memcpy(subsystem_panic, name, strlen(name));
+#endif
 	/*
 	 * If a system reboot/shutdown is underway, ignore subsystem errors.
 	 * However, print a message so that we know that a subsystem behaved
@@ -1132,6 +1151,23 @@ int subsystem_restart_dev(struct subsys_device *dev)
 	return 0;
 }
 EXPORT_SYMBOL(subsystem_restart_dev);
+
+#ifdef CONFIG_BBRY
+void subsystem_ramdump_indication(struct subsys_device *dev, unsigned int indication)
+{
+	pr_info("subsystem_ramdump_indication = %d.\n", indication);
+
+	if ( (indication & 0x1) == 0x1)
+		dev->supress_ramdump = true;
+	else
+		dev->supress_ramdump = false;
+
+	// force restart_level to RESET_SOC to invoke AP ramdump
+	if ( (indication & 0x2) == 0x2)
+		dev->restart_level = RESET_SOC;
+}
+EXPORT_SYMBOL(subsystem_ramdump_indication);
+#endif
 
 int subsystem_restart(const char *name)
 {
@@ -1781,6 +1817,9 @@ static struct notifier_block panic_nb = {
 static int __init subsys_restart_init(void)
 {
 	int ret;
+#ifdef CONFIG_MSM_DLOAD_MODE
+	sprintf(subsystem_panic, "%s", "unknown");
+#endif /* CONFIG_MSM_DLOAD_MODE */
 
 	ssr_wq = alloc_workqueue("ssr_wq", WQ_CPU_INTENSIVE, 0);
 	BUG_ON(!ssr_wq);

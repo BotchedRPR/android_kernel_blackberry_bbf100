@@ -253,6 +253,18 @@ source "kernel/Kconfig.freezer"
 
 source "arch/arm64/Kconfig.platforms"
 
+source "arch/arm64/Kconfig.products"
+
+#start: BBRY_ANDROID
+menu "BBRY support"
+config BBRY
+	bool "BBRY support"
+	default N
+	---help---
+        Enable support for BBRY boards
+endmenu
+#end: BBRY_ANDROID
+
 menu "Bus support"
 
 config PCI

@@ -46,6 +46,9 @@ static struct device_attribute dual_role_attrs[] = {
 	DUAL_ROLE_ATTR(power_role),
 	DUAL_ROLE_ATTR(data_role),
 	DUAL_ROLE_ATTR(powers_vconn),
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	DUAL_ROLE_ATTR(state),
+#endif
 };
 
 struct class *dual_role_class;
@@ -323,7 +326,13 @@ static ssize_t dual_role_show_property(struct device *dev,
 					vconn_supply_text[value]);
 		else
 			return -EIO;
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	} else if (off == DUAL_ROLE_PROP_STATE) {
+		return snprintf(buf, PAGE_SIZE, "%d\n", value);
 	} else
+#else
+	} else
+#endif
 		return -EIO;
 }
 

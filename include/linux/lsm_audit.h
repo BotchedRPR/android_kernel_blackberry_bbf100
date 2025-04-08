@@ -87,6 +87,9 @@ struct common_audit_data {
 #ifdef CONFIG_SECURITY_APPARMOR
 		struct apparmor_audit_data *apparmor_audit_data;
 #endif
+#ifdef CONFIG_BBSECURE_PATHTRUST
+		struct pathtrust_audit_data *pathtrust_audit_data;
+#endif /* CONFIG_BBSECURE_PATHTRUST */
 	}; /* per LSM data pointer union */
 };
 

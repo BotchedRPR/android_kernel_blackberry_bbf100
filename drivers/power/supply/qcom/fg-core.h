@@ -31,13 +31,24 @@
 #include <linux/uaccess.h>
 #include <linux/pmic-voter.h>
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+extern int fg_gen3_debug_mask;
 #define fg_dbg(chip, reason, fmt, ...)			\
 	do {							\
-		if (*chip->debug_mask & (reason))		\
-			pr_info(fmt, ##__VA_ARGS__);	\
+		if (chip && (fg_gen3_debug_mask & (reason)))		\
+			pr_err(fmt, ##__VA_ARGS__);	\
 		else						\
 			pr_debug(fmt, ##__VA_ARGS__);	\
 	} while (0)
+#else
+#define fg_dbg(chip, reason, fmt, ...)			\
+	do {							\
+		if (*chip->debug_mask & (reason))		\
+			pr_err(fmt, ##__VA_ARGS__);	\
+		else						\
+			pr_debug(fmt, ##__VA_ARGS__);	\
+	} while (0)
+#endif
 
 #define is_between(left, right, value) \
 		(((left) >= (right) && (left) >= (value) \

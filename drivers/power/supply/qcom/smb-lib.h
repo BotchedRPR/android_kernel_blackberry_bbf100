@@ -26,6 +26,9 @@ enum print_reason {
 	PR_MISC		= BIT(2),
 	PR_PARALLEL	= BIT(3),
 	PR_OTG		= BIT(4),
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	PR_DUMP     = BIT(7),
+#endif
 };
 
 #define DEFAULT_VOTER			"DEFAULT_VOTER"
@@ -65,6 +68,17 @@ enum print_reason {
 #define OTG_DELAY_VOTER			"OTG_DELAY_VOTER"
 #define USBIN_I_VOTER			"USBIN_I_VOTER"
 #define WEAK_CHARGER_VOTER		"WEAK_CHARGER_VOTER"
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+#define ICL_CHG_VOTER		"ICL_CHG_VOTER"
+#define PL_HW_ABSENT_VOTER		"PL_HW_ABSENT_VOTER"
+#define SOFT_JEITA_RESTORE_VOTER	"SOFT_JEITA_RESTORE_VOTER"
+#define QC2_FCC_VOTER		"QC2_FCC_VOTER"
+#define USER_BAT_CHG_VOTER		"USER_BAT_CHG_VOTER"
+#define USER_CHG_VOTER		"USER_CHG_VOTER"
+#define CC_CHECK_VOTER		"CC_CHECK_VOTER"
+#define ICL_INIT_VOTER		"ICL_INIT_VOTER"
+#endif
 
 #define VCONN_MAX_ATTEMPTS	3
 #define OTG_MAX_ATTEMPTS	3
@@ -286,7 +300,11 @@ struct smb_charger {
 
 	/* work */
 	struct work_struct	bms_update_work;
+
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 	struct work_struct	rdstd_cc2_detach_work;
+#endif
+
 	struct delayed_work	hvdcp_detect_work;
 	struct delayed_work	ps_change_timeout_work;
 	struct delayed_work	clear_hdc_work;
@@ -296,8 +314,14 @@ struct smb_charger {
 	struct delayed_work	icl_change_work;
 	struct delayed_work	pl_enable_work;
 	struct work_struct	legacy_detection_work;
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 	struct delayed_work	uusb_otg_work;
 	struct delayed_work	bb_removal_work;
+#endif
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	struct delayed_work	cc_check_work;
+#endif
 
 	/* cached status */
 	int			voltage_min_uv;
@@ -314,15 +338,27 @@ struct smb_charger {
 	bool			sw_jeita_enabled;
 	bool			is_hdc;
 	bool			chg_done;
+
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 	bool			micro_usb_mode;
+#endif
+
 	bool			otg_en;
 	bool			vconn_en;
+
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 	bool			suspend_input_on_debug_batt;
+#endif
+
 	int			otg_attempts;
 	int			vconn_attempts;
 	int			default_icl_ua;
 	int			otg_cl_ua;
+
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 	bool			uusb_apsd_rerun_done;
+#endif
+
 	bool			pd_hard_reset;
 	bool			typec_present;
 	u8			typec_status[5];
@@ -353,6 +389,15 @@ struct smb_charger {
 	/* qnovo */
 	int			usb_icl_delta_ua;
 	int			pulse_cnt;
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	bool		apsd_rerun_done;
+	bool		icl_check_done;
+#endif
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	bool		safety_timer_expired;
+#endif
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
@@ -392,14 +437,22 @@ irqreturn_t smblib_handle_chg_state_change(int irq, void *data);
 irqreturn_t smblib_handle_batt_temp_changed(int irq, void *data);
 irqreturn_t smblib_handle_batt_psy_changed(int irq, void *data);
 irqreturn_t smblib_handle_usb_psy_changed(int irq, void *data);
+
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 irqreturn_t smblib_handle_usbin_uv(int irq, void *data);
+#endif
+
 irqreturn_t smblib_handle_usb_plugin(int irq, void *data);
 irqreturn_t smblib_handle_usb_source_change(int irq, void *data);
 irqreturn_t smblib_handle_icl_change(int irq, void *data);
 irqreturn_t smblib_handle_usb_typec_change(int irq, void *data);
 irqreturn_t smblib_handle_dc_plugin(int irq, void *data);
 irqreturn_t smblib_handle_high_duty_cycle(int irq, void *data);
+
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 irqreturn_t smblib_handle_switcher_power_ok(int irq, void *data);
+#endif
+
 irqreturn_t smblib_handle_wdog_bark(int irq, void *data);
 
 int smblib_get_prop_input_suspend(struct smb_charger *chg,
@@ -428,6 +481,20 @@ int smblib_get_prop_batt_temp(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_batt_charge_counter(struct smb_charger *chg,
 				union power_supply_propval *val);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+int smblib_get_prop_charging_enabled(struct smb_charger *chg,
+				union power_supply_propval *val);
+int smblib_set_prop_charging_enabled(struct smb_charger *chg,
+				const union power_supply_propval *val);
+void smblib_get_prop_otg_en(struct smb_charger *chg,
+				  union power_supply_propval *val);
+int smblib_get_prop_safety_timer_enabled(struct smb_charger *chg,
+				  union power_supply_propval *val);
+int smblib_set_prop_safety_timer_enabled(struct smb_charger *chg,
+				  const union power_supply_propval *val);
+#endif
+
 int smblib_set_prop_input_suspend(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_set_prop_batt_capacity(struct smb_charger *chg,
@@ -502,7 +569,11 @@ int smblib_set_prop_ship_mode(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_set_prop_charge_qnovo_enable(struct smb_charger *chg,
 				const union power_supply_propval *val);
+
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 void smblib_suspend_on_debug_battery(struct smb_charger *chg);
+#endif
+
 int smblib_rerun_apsd_if_required(struct smb_charger *chg);
 int smblib_get_prop_fcc_delta(struct smb_charger *chg,
 				union power_supply_propval *val);
@@ -520,4 +591,11 @@ int smblib_set_prop_pr_swap_in_progress(struct smb_charger *chg,
 
 int smblib_init(struct smb_charger *chg);
 int smblib_deinit(struct smb_charger *chg);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+void smblib_dump_regs(struct smb_charger *chip);
+int smblib_configure_typec(struct smb_charger *chg);
+int smblib_disable_typec(struct smb_charger *chg);
+#endif
+
 #endif /* __SMB2_CHARGER_H */

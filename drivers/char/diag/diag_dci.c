@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -982,6 +982,7 @@ void extract_dci_pkt_rsp(unsigned char *buf, int len, int data_source,
 	unsigned char *temp = buf;
 	int save_req_uid = 0;
 	struct diag_dci_pkt_rsp_header_t pkt_rsp_header;
+	int header_len = sizeof(struct diag_dci_pkt_rsp_header_t); // MODIFIED by hongwei.tian, 2019-12-06,BUG-8663278
 
 	if (!buf) {
 		pr_err("diag: Invalid pointer in %s\n", __func__);
@@ -1042,23 +1043,26 @@ void extract_dci_pkt_rsp(unsigned char *buf, int len, int data_source,
 	mutex_lock(&rsp_buf->data_mutex);
 	/*
 	 * Check if we can fit the data in the rsp buffer. The total length of
-	 * the rsp is the rsp length (write_len) + DCI_PKT_RSP_TYPE header (int)
-	 * + field for length (int) + delete_flag (uint8_t)
+	 // MODIFIED-BEGIN by hongwei.tian, 2019-12-06, BUG-8663278
+	 * the rsp is the rsp length (write_len) + dci response packet header
+	 * length (sizeof(struct diag_dci_pkt_rsp_header_t))
 	 */
-	if ((rsp_buf->data_len + 9 + rsp_len) > rsp_buf->capacity) {
+	if ((rsp_buf->data_len + header_len + rsp_len) > rsp_buf->capacity) {
 		pr_alert("diag: create capacity for pkt rsp\n");
-		rsp_buf->capacity += 9 + rsp_len;
-		temp_buf = krealloc(rsp_buf->data, rsp_buf->capacity,
-				    GFP_KERNEL);
+		temp_buf = vzalloc(rsp_buf->capacity + header_len + rsp_len);
 		if (!temp_buf) {
 			pr_err("diag: DCI realloc failed\n");
 			mutex_unlock(&rsp_buf->data_mutex);
 			mutex_unlock(&entry->buffers[data_source].buf_mutex);
 			mutex_unlock(&driver->dci_mutex);
 			return;
-		} else {
-			rsp_buf->data = temp_buf;
 		}
+		rsp_buf->capacity += header_len + rsp_len;
+		if (rsp_buf->capacity > rsp_buf->data_len)
+			memcpy(temp_buf, rsp_buf->data, rsp_buf->data_len);
+		vfree(rsp_buf->data);
+		rsp_buf->data = temp_buf;
+		/* MODIFIED-END by hongwei.tian,BUG-8663278*/
 	}
 
 	/* Fill in packet response header information */
@@ -1067,9 +1071,10 @@ void extract_dci_pkt_rsp(unsigned char *buf, int len, int data_source,
 	pkt_rsp_header.length = rsp_len + sizeof(int);
 	pkt_rsp_header.delete_flag = delete_flag;
 	pkt_rsp_header.uid = save_req_uid;
-	memcpy(rsp_buf->data + rsp_buf->data_len, &pkt_rsp_header,
-		sizeof(struct diag_dci_pkt_rsp_header_t));
-	rsp_buf->data_len += sizeof(struct diag_dci_pkt_rsp_header_t);
+	/* MODIFIED-BEGIN by hongwei.tian, 2019-12-06,BUG-8663278*/
+	memcpy(rsp_buf->data + rsp_buf->data_len, &pkt_rsp_header, header_len);
+	rsp_buf->data_len += header_len;
+	/* MODIFIED-END by hongwei.tian,BUG-8663278*/
 	memcpy(rsp_buf->data + rsp_buf->data_len, temp, rsp_len);
 	rsp_buf->data_len += rsp_len;
 	rsp_buf->data_source = data_source;
@@ -2295,8 +2300,10 @@ struct diag_dci_client_tbl *dci_lookup_client_entry_pid(int tgid)
 		pid_struct = find_get_pid(entry->tgid);
 		if (!pid_struct) {
 			DIAG_LOG(DIAG_DEBUG_DCI,
-				"diag: valid pid doesn't exist for pid = %d\n",
-				entry->tgid);
+			/* MODIFIED-BEGIN by hongwei.tian, 2019-08-01,BUG-8201403*/
+			"diag: Exited pid (%d) doesn't match dci client of pid (%d)\n",
+			tgid, entry->tgid);
+			/* MODIFIED-END by hongwei.tian,BUG-8201403*/
 			continue;
 		}
 		task_s = get_pid_task(pid_struct, PIDTYPE_PID);
@@ -3060,6 +3067,7 @@ fail_alloc:
 		kfree(new_entry);
 		new_entry = NULL;
 	}
+	put_task_struct(current); // MODIFIED by hongwei.tian, 2020-12-15,BUG-10459375
 	mutex_unlock(&driver->dci_mutex);
 	return DIAG_DCI_NO_REG;
 }

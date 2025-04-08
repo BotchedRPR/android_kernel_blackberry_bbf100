@@ -138,7 +138,25 @@ static ssize_t sel_read_enforce(struct file *filp, char __user *buf,
 	return simple_read_from_buffer(buf, count, ppos, tmpbuf, length);
 }
 
-#ifdef CONFIG_SECURITY_SELINUX_DEVELOP
+#if !defined(CONFIG_SECURITY_SELINUX_DEVELOP) && defined(CONFIG_BBSECURE_SECURITY_SELINUX_DEVELOP_ENFORCE)
+static int allow_sel_write_enforce = -1;
+
+static int __init selinuxfs_hlos_tkn_setup(char *val)
+{
+	unsigned long has_hlos_token = 0;
+	if (!kstrtoul(val, 0, &has_hlos_token) && (has_hlos_token == 1))
+		allow_sel_write_enforce = 1;
+
+	/* This is really a bit of a hack. Here we pretend
+	 * that it has not been handled to give other kernel
+	 * modules and userland a chance to handle this param.
+	 */
+	return 0;
+}
+__setup("androidboot.hlos.unsigned=", selinuxfs_hlos_tkn_setup);
+#endif
+
+#if defined(CONFIG_SECURITY_SELINUX_DEVELOP) || defined(CONFIG_BBSECURE_SECURITY_SELINUX_DEVELOP_ENFORCE)
 static ssize_t sel_write_enforce(struct file *file, const char __user *buf,
 				 size_t count, loff_t *ppos)
 
@@ -147,6 +165,12 @@ static ssize_t sel_write_enforce(struct file *file, const char __user *buf,
 	ssize_t length;
 	int new_value;
 
+#if !defined(CONFIG_SECURITY_SELINUX_DEVELOP) && defined(CONFIG_BBSECURE_SECURITY_SELINUX_DEVELOP_ENFORCE)
+	if (allow_sel_write_enforce != 1) {
+		length = -EACCES;
+		goto out;
+	}
+#endif
 	length = -ENOMEM;
 	if (count >= PAGE_SIZE)
 		goto out;
@@ -178,7 +202,7 @@ static ssize_t sel_write_enforce(struct file *file, const char __user *buf,
 			new_value, selinux_enforcing,
 			from_kuid(&init_user_ns, audit_get_loginuid(current)),
 			audit_get_sessionid(current));
-		selinux_enforcing = new_value;
+		update_protected(selinux_enforcing, new_value);
 		if (selinux_enforcing)
 			avc_ss_reset(0);
 		selnl_notify_setenforce(selinux_enforcing);

@@ -193,6 +193,10 @@ enum msm_flash_cfg_type_t {
 	CFG_FLASH_INIT,
 	CFG_FLASH_RELEASE,
 	CFG_FLASH_OFF,
+#ifdef CONFIG_BBRY
+	CFG_FLASH_MITIGATION_LEVELS,
+	CFG_TORCH_ON,
+#endif /* CONFIG_BBRY */
 	CFG_FLASH_LOW,
 	CFG_FLASH_HIGH,
 };
@@ -367,6 +371,7 @@ struct msm_camera_csiphy_params {
 	unsigned char csid_core;
 	unsigned int csiphy_clk;
 	unsigned char csi_3phase;
+	uint64_t data_rate;
 };
 
 struct msm_camera_i2c_seq_reg_array {

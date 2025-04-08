@@ -67,6 +67,9 @@ static void show_mnt_opts(struct seq_file *m, struct vfsmount *mnt)
 		{ MNT_NOATIME, ",noatime" },
 		{ MNT_NODIRATIME, ",nodiratime" },
 		{ MNT_RELATIME, ",relatime" },
+#ifdef CONFIG_BBSECURE_PATHTRUST
+		{ MNT_TRUSTED, ",trusted" },
+#endif /* CONFIG_BBSECURE_PATHTRUST */
 		{ 0, NULL }
 	};
 	const struct proc_fs_info *fs_infop;

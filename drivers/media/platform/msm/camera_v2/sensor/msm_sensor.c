@@ -24,6 +24,8 @@
 static struct msm_camera_i2c_fn_t msm_sensor_cci_func_tbl;
 static struct msm_camera_i2c_fn_t msm_sensor_secure_func_tbl;
 
+#define SENSOR_COM
+
 static void msm_sensor_adjust_mclk(struct msm_camera_power_ctrl_t *ctrl)
 {
 	int idx;
@@ -236,6 +238,130 @@ static uint16_t msm_sensor_id_by_mask(struct msm_sensor_ctrl_t *s_ctrl,
 	return sensor_id;
 }
 
+#ifdef SENSOR_COM
+static int msm_sensor_check_module_id(struct msm_camera_i2c_client *sensor_i2c_client,const char *sensor_name)
+{
+    uint16_t org_slave;
+    uint16_t module_info=0;
+    uint16_t module_id=0;
+    int rc = 0;
+
+    if (!sensor_i2c_client || !sensor_name) {
+        pr_err("%s:%d failed: %pK %pK\n",
+        	__func__, __LINE__, sensor_i2c_client,sensor_name);
+        return -EINVAL;
+    }
+
+    if(sensor_i2c_client->cci_client){
+        org_slave = sensor_i2c_client->cci_client->sid;
+        //0xA0: 2l9 eeprom slave addr
+        sensor_i2c_client->cci_client->sid = 0xA0 >> 1;
+        rc = sensor_i2c_client->i2c_func_tbl->i2c_read(sensor_i2c_client, 0x0000,
+        		&module_info, MSM_CAMERA_I2C_WORD_DATA);
+        sensor_i2c_client->cci_client->sid = org_slave;
+        if(rc < 0){
+            pr_err("%s: %s: i2c read module_info failed\n", __func__, sensor_name);
+            return 0;
+        }
+    }
+    if((module_info & 0xFF00) != 0x0100){
+    	pr_err("%s: %s: read  module_info %d invalid\n", __func__, sensor_name,module_info);
+    }
+
+    module_id = module_info & 0x00FF;
+
+    if(strcmp(sensor_name,"s5k2l9_qtech_athena")== 0){
+    	if(module_id == 0x06){
+    		pr_err("%s: %s: Qtech 2l9 check module id ok\n", __func__, sensor_name);
+    		return rc;
+    	}else{
+    		return -ENODEV;
+    	}
+    }
+    if(strcmp(sensor_name,"s5k2l9_sunny_athena")== 0){
+    	if(module_id == 0x01){
+    		pr_err("%s: %s: Sunny 2l9 check module id ok\n", __func__, sensor_name);
+    		return rc;
+    	}else{
+    		return -ENODEV;
+    	}
+    }
+    if(strcmp(sensor_name,"s5k2l9_athena")== 0){
+    	if(module_id == 0x01 || module_id == 0x06){
+    		pr_err("%s: %s: return failed,module id =(01 or 06)\n", __func__, sensor_name);
+    		return -ENODEV;
+    	}else{
+    		return rc;
+    	}
+    }
+    return -ENODEV;
+}
+
+static int msm_sensor_check_aux_module_id(struct msm_camera_i2c_client *sensor_i2c_client,const char *sensor_name)
+{
+    uint16_t org_slave;
+    uint16_t module_info=0;
+    uint16_t module_id=0;
+    int rc = 0;
+
+    if (!sensor_i2c_client || !sensor_name) {
+    	pr_err("%s:%d failed: %pK %pK\n",
+    		__func__, __LINE__, sensor_i2c_client,sensor_name);
+    	return -EINVAL;
+    }
+
+    if(sensor_i2c_client->cci_client){
+        org_slave = sensor_i2c_client->cci_client->sid;
+        //0xA2: Qtech 3m3 eeprom slave addr
+        sensor_i2c_client->cci_client->sid = 0xA2 >> 1;
+        rc = sensor_i2c_client->i2c_func_tbl->i2c_read(sensor_i2c_client, 0x0000,
+        		&module_info, MSM_CAMERA_I2C_WORD_DATA);
+        if(rc < 0){
+            pr_err("it maybe Sunny module, try 0xA0");
+            // try 0xA0 for Sunny 3m3
+            sensor_i2c_client->cci_client->sid = 0xA0 >> 1;
+            rc = sensor_i2c_client->i2c_func_tbl->i2c_read(sensor_i2c_client, 0x0000,
+                    &module_info, MSM_CAMERA_I2C_WORD_DATA);
+        }
+        sensor_i2c_client->cci_client->sid = org_slave;
+        if(rc < 0){
+            pr_err("%s: %s: i2c read module_info failed\n", __func__, sensor_name);
+            return 0;
+        }
+    }
+    if((module_info & 0xFF00) != 0x0100){
+    	pr_err("%s: %s: read  module_info %d invalid\n", __func__, sensor_name,module_info);
+    }
+
+    module_id = module_info & 0x00FF;
+
+    if(strcmp(sensor_name,"s5k3m3_qtech_athena")== 0){
+        if(module_id == 0x06){
+            pr_err("%s: %s: Qtech 3m3 check module id ok\n", __func__, sensor_name);
+        	return rc;
+        }else{
+        	return -ENODEV;
+        }
+    }
+    if(strcmp(sensor_name,"s5k3m3_sunny_athena")== 0){
+        if(module_id == 0x01){
+            pr_err("%s: %s: Sunny 3m3 check module id ok\n", __func__, sensor_name);
+        	return rc;
+        }else{
+        	return -ENODEV;
+        }
+    }
+    if(strcmp(sensor_name,"s5k3m3_athena")== 0){
+        if(module_id == 0x01 || module_id == 0x06){
+        	pr_err("%s: %s: return failed,module id =(01 or 06)\n", __func__, sensor_name);
+        	return -ENODEV;
+        }else{
+        	return rc;
+        }
+    }
+    return -ENODEV;
+}
+#endif
 int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 {
 	int rc = 0;
@@ -268,12 +394,27 @@ int msm_sensor_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 		return rc;
 	}
 
-	pr_debug("%s: read id: 0x%x expected id 0x%x:\n",
-			__func__, chipid, slave_info->sensor_id);
+	pr_debug("%s:%s, read id: 0x%x expected id 0x%x:\n",
+			__func__,sensor_name, chipid, slave_info->sensor_id);
 	if (msm_sensor_id_by_mask(s_ctrl, chipid) != slave_info->sensor_id) {
 		pr_err("%s chip id %x does not match %x\n",
 				__func__, chipid, slave_info->sensor_id);
 		return -ENODEV;
+	}
+	#ifdef SENSOR_COM
+	if(strcmp(sensor_name,"s5k2l9_qtech_athena")== 0
+		|| strcmp(sensor_name,"s5k2l9_sunny_athena")== 0
+		|| strcmp(sensor_name,"s5k2l9_athena")== 0){
+		rc = msm_sensor_check_module_id(sensor_i2c_client,sensor_name);
+	}
+	if(strcmp(sensor_name,"s5k3m3_qtech_athena")== 0
+		|| strcmp(sensor_name,"s5k3m3_sunny_athena")== 0
+		|| strcmp(sensor_name,"s5k3m3_athena")== 0){
+		rc = msm_sensor_check_aux_module_id(sensor_i2c_client,sensor_name);
+	}
+	#endif
+	if(rc < 0){
+		pr_err("%s: %s: check module id failed\n", __func__, sensor_name);
 	}
 	return rc;
 }

@@ -19,8 +19,8 @@
 #include "av_permissions.h"
 #include "security.h"
 
-#ifdef CONFIG_SECURITY_SELINUX_DEVELOP
-extern int selinux_enforcing;
+#if defined(CONFIG_SECURITY_SELINUX_DEVELOP) || defined(CONFIG_BBSECURE_SECURITY_SELINUX_DEVELOP_ENFORCE)
+extern int __ro_protected selinux_enforcing;
 #else
 #define selinux_enforcing 1
 #endif
@@ -174,6 +174,11 @@ u32 avc_policy_seqno(void);
 #define AVC_CALLBACK_ADD_XPERMS		256
 
 int avc_add_callback(int (*callback)(u32 event), u32 events);
+/* start:BBSECURE_BIDE */
+#ifdef CONFIG_BBSECURE_BIDE
+int avc_set_current_audit_callback(void (*audit_callback) (char *buffer));
+#endif /* CONFIG_BBSECURE_BIDE */
+/* end:BBSECURE_BIDE */
 
 /* Exported to selinuxfs */
 int avc_get_hash_stats(char *page);

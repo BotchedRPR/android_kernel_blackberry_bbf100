@@ -928,7 +928,7 @@ static struct urb *xhci_request_single_step_set_feature_urb(
 	urb->transfer_flags = URB_DIR_IN;
 	usb_get_urb(urb);
 	atomic_inc(&urb->use_count);
-	atomic_inc(&urb->dev->urbnum);
+	atomic_inc_unchecked(&urb->dev->urbnum);
 	usb_hcd_map_urb_for_dma(hcd, urb, GFP_KERNEL);
 	urb->context = done;
 	return urb;
@@ -1004,7 +1004,7 @@ static int xhci_ehset_single_step_set_feature(struct usb_hcd *hcd, int port)
 	urb->status = -EINPROGRESS;
 	usb_get_urb(urb);
 	atomic_inc(&urb->use_count);
-	atomic_inc(&urb->dev->urbnum);
+	atomic_inc_unchecked(&urb->dev->urbnum);
 
 	spin_lock_irqsave(&xhci->lock, flags);
 	retval = xhci_submit_single_step_set_feature(hcd, urb, 0);

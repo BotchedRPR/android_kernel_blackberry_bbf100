@@ -386,7 +386,10 @@ void ctrl_alt_del(void)
 		kill_cad_pid(SIGINT, 1);
 }
 
-char poweroff_cmd[POWEROFF_CMD_PATH_LEN] = "/sbin/poweroff";
+// start: BBSECURE_POWEROFF_CMD_DEFAULT
+char poweroff_cmd[POWEROFF_CMD_PATH_LEN] = CONFIG_BBSECURE_POWEROFF_CMD_DEFAULT;
+// end: BBSECURE_POWEROFF_CMD_DEFAULT
+
 static const char reboot_cmd[] = "/sbin/reboot";
 
 static int run_cmd(const char *cmd)

@@ -91,6 +91,10 @@ struct inodes_stat_t {
 #define MS_I_VERSION	(1<<23) /* Update inode I_version field */
 #define MS_STRICTATIME	(1<<24) /* Always perform atime updates */
 #define MS_LAZYTIME	(1<<25) /* Update the on-disk [acm]times lazily */
+#ifdef CONFIG_BBSECURE_PATHTRUST
+/* 25 is used in external/kernel-headers/original/uapi/linux/fs.h */
+#define MS_TRUSTED	(1<<26) /* Trusted Filesystem */
+#endif /* CONFIG_BBSECURE_PATHTRUST */
 
 /* These sb flags are internal to the kernel */
 #define MS_NOSEC	(1<<28)

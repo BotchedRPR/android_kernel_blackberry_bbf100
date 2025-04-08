@@ -323,6 +323,9 @@ struct _mmc_csd {
 
 #define EXT_CSD_CARD_TYPE_HS_26	(1<<0)	/* Card can run at 26MHz */
 #define EXT_CSD_CARD_TYPE_HS_52	(1<<1)	/* Card can run at 52MHz */
+#ifdef CONFIG_TCT_SDM660_COMMON
+#define EXT_CSD_CARD_TYPE_MASK 0xFF    /* Mask out reserved bits */
+#endif
 #define EXT_CSD_CARD_TYPE_HS	(EXT_CSD_CARD_TYPE_HS_26 | \
 				 EXT_CSD_CARD_TYPE_HS_52)
 #define EXT_CSD_CARD_TYPE_DDR_1_8V  (1<<2)   /* Card can run at 52MHz */

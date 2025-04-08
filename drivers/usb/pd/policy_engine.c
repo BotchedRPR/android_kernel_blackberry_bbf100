@@ -9,6 +9,9 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#if defined(CONFIG_TCT_SDM660_COMMON)
+#define pr_fmt(fmt) "[PE]: %s(): " fmt, __func__
+#endif
 
 #include <linux/completion.h>
 #include <linux/delay.h>
@@ -145,6 +148,36 @@ enum vdm_state {
 };
 
 static void *usbpd_ipc_log;
+#if defined(CONFIG_TCT_SDM660_COMMON)
+enum {
+	LOG_LEVEL_ERR = BIT(0),
+	LOG_LEVEL_DEBUG = BIT(1),
+	LOG_LEVEL_ALL = 0xFF,
+};
+
+static int pdlog = CONFIG_USB_PD_LOG_LVL;
+module_param(pdlog, int, S_IRUGO|S_IWUSR);
+
+#define usbpd_err(dev, fmt, ...) \
+	do { \
+		if (pdlog & LOG_LEVEL_ERR) { \
+			ipc_log_string(usbpd_ipc_log, "%s(): " fmt, __func__, \
+					##__VA_ARGS__); \
+			pr_err(fmt, ##__VA_ARGS__); \
+		} \
+	} while (0)
+
+#define usbpd_dbg(dev, fmt, ...) \
+	do { \
+		if (pdlog & LOG_LEVEL_DEBUG) \
+			ipc_log_string(usbpd_ipc_log, "%s(): " fmt, __func__, \
+					##__VA_ARGS__); \
+			pr_debug(fmt, ##__VA_ARGS__); \
+	} while (0)
+
+#define usbpd_info usbpd_dbg
+#define usbpd_warn usbpd_dbg
+#else
 #define usbpd_dbg(dev, fmt, ...) do { \
 	ipc_log_string(usbpd_ipc_log, "%s: %s: " fmt, dev_name(dev), __func__, \
 			##__VA_ARGS__); \
@@ -168,8 +201,13 @@ static void *usbpd_ipc_log;
 			##__VA_ARGS__); \
 	dev_err(dev, fmt, ##__VA_ARGS__); \
 	} while (0)
+#endif
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+#define NUM_LOG_PAGES		(30)
+#else
 #define NUM_LOG_PAGES		10
+#endif
 
 /* Timeouts (in ms) */
 #define ERROR_RECOVERY_TIME	25
@@ -193,6 +231,10 @@ static void *usbpd_ipc_log;
 #define SNK_HARD_RESET_VBUS_ON_TIME	(1000 + 275)
 
 #define PD_CAPS_COUNT		50
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+#define PD_GLOBAL_COUNT		(3)
+#endif
 
 #define PD_MAX_MSG_ID		7
 
@@ -284,10 +326,19 @@ static void *usbpd_ipc_log;
 static bool check_vsafe0v = true;
 module_param(check_vsafe0v, bool, S_IRUSR | S_IWUSR);
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+static int min_sink_current = 500;
+#else
 static int min_sink_current = 900;
+#endif
 module_param(min_sink_current, int, S_IRUSR | S_IWUSR);
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+static const u32 default_src_caps[] = { 0x26019032 };	/* VSafe5V @ 0.5A */
+#else
 static const u32 default_src_caps[] = { 0x36019096 };	/* VSafe5V @ 1.5A */
+#endif
+
 static const u32 default_snk_caps[] = { 0x2601912C };	/* VSafe5V @ 3A */
 
 struct vdm_tx {
@@ -315,9 +366,20 @@ struct usbpd {
 	struct extcon_dev	*extcon;
 
 	enum usbpd_state	current_state;
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	atomic_t		hard_reset_recvd;
+#else
 	bool			hard_reset_recvd;
+#endif
+
 	struct list_head	rx_q;
 	spinlock_t		rx_lock;
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	spinlock_t	pm_lock;
+	bool	awake;
+#endif
 
 	u32			received_pdos[PD_MAX_DATA_OBJ];
 	u16			src_cap_id;
@@ -369,6 +431,10 @@ struct usbpd {
 	int			caps_count;
 	int			hard_reset_count;
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	int			global_cnt;
+#endif
+
 	enum vdm_state		vdm_state;
 	u16			*discovered_svids;
 	int			num_svids;
@@ -380,6 +446,10 @@ struct usbpd {
 };
 
 static LIST_HEAD(_usbpd);	/* useful for debugging */
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+static void reset_vdm_state(struct usbpd *pd);
+#endif
 
 static const unsigned int usbpd_extcon_cable[] = {
 	EXTCON_USB,
@@ -406,14 +476,35 @@ enum plug_orientation usbpd_get_plug_orientation(struct usbpd *pd)
 }
 EXPORT_SYMBOL(usbpd_get_plug_orientation);
 
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+static void usbpd_pm_control(struct usbpd *pd, bool request)
+{
+	if (!pd->awake && request)
+		pm_stay_awake(&pd->dev);
+	else if (pd->awake && !request)
+		pm_relax(&pd->dev);
+
+	pd->awake = request;
+}
+#endif
+
 static inline void stop_usb_host(struct usbpd *pd)
 {
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	usbpd_err(&pd->dev, "stop usb host \n");
+#endif
+
 	extcon_set_cable_state_(pd->extcon, EXTCON_USB_HOST, 0);
 }
 
 static inline void start_usb_host(struct usbpd *pd, bool ss)
 {
 	enum plug_orientation cc = usbpd_get_plug_orientation(pd);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	usbpd_err(&pd->dev, "start usb host with ss:%d \n", ss);
+#endif
 
 	extcon_set_cable_state_(pd->extcon, EXTCON_USB_CC,
 			cc == ORIENTATION_CC2);
@@ -423,12 +514,20 @@ static inline void start_usb_host(struct usbpd *pd, bool ss)
 
 static inline void stop_usb_peripheral(struct usbpd *pd)
 {
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	usbpd_err(&pd->dev, "stop usb peripheral \n");
+#endif
+
 	extcon_set_cable_state_(pd->extcon, EXTCON_USB, 0);
 }
 
 static inline void start_usb_peripheral(struct usbpd *pd)
 {
 	enum plug_orientation cc = usbpd_get_plug_orientation(pd);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	usbpd_err(&pd->dev, "start usb peripheral \n");
+#endif
 
 	extcon_set_cable_state_(pd->extcon, EXTCON_USB_CC,
 			cc == ORIENTATION_CC2);
@@ -545,9 +644,18 @@ static int pd_select_pdo(struct usbpd *pd, int pdo_pos, int uv, int ua)
 	}
 
 	/* Can't sink more than 5V if VCONN is sourced from the VBUS input */
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (pd->vconn_enabled && !pd->vconn_is_external &&
+			pd->requested_voltage > 5000000) {
+		usbpd_err(&pd->dev, 
+				"Can't sink more than 5V if VCONN is sourced from the VBUS input\n");
+		return -ENOTSUPP;
+	}
+#else
 	if (pd->vconn_enabled && !pd->vconn_is_external &&
 			pd->requested_voltage > 5000000)
 		return -ENOTSUPP;
+#endif
 
 	pd->requested_current = curr;
 	pd->requested_pdo = pdo_pos;
@@ -571,14 +679,33 @@ static int pd_eval_src_caps(struct usbpd *pd)
 	pd->peer_dr_swap = PD_SRC_PDO_FIXED_DR_SWAP(first_pdo);
 
 	val.intval = PD_SRC_PDO_FIXED_USB_SUSP(first_pdo);
+
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 	power_supply_set_property(pd->usb_psy,
 			POWER_SUPPLY_PROP_PD_USB_SUSPEND_SUPPORTED, &val);
+#endif
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	usbpd_dbg(&pd->dev, "src_cap[0]: 0x%08x\n", first_pdo);
+	pd->spec_rev = USBPD_REV_20;
+#endif
 
 	for (obj_cnt = 1; obj_cnt < PD_MAX_DATA_OBJ; obj_cnt++) {
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		usbpd_dbg(&pd->dev, "src_cap[%d]: 0x%08x\n", obj_cnt,
+					pd->received_pdos[obj_cnt]);
+		if ((PD_SRC_PDO_TYPE(pd->received_pdos[obj_cnt]) ==
+					PD_SRC_PDO_TYPE_AUGMENTED) &&
+				!PD_APDO_PPS(pd->received_pdos[obj_cnt])) {
+			pd->spec_rev = USBPD_REV_30;
+			break;
+		}
+#else
 		if ((PD_SRC_PDO_TYPE(pd->received_pdos[obj_cnt]) ==
 					PD_SRC_PDO_TYPE_AUGMENTED) &&
 				!PD_APDO_PPS(pd->received_pdos[obj_cnt]))
 			pd->spec_rev = USBPD_REV_30;
+#endif
 	}
 
 	/* Select the first PDO (vSafe5V) immediately. */
@@ -599,12 +726,25 @@ static void pd_send_hard_reset(struct usbpd *pd)
 	pd_phy_signal(HARD_RESET_SIG, 5); /* tHardResetComplete */
 	pd->in_pr_swap = false;
 	power_supply_set_property(pd->usb_psy, POWER_SUPPLY_PROP_PR_SWAP, &val);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	pd->global_cnt++;
+#endif
 }
 
 static void kick_sm(struct usbpd *pd, int ms)
 {
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	unsigned long flags;
+
+	spin_lock_irqsave(&pd->pm_lock, flags);
+	usbpd_pm_control(pd, true);
+	pd->sm_queued = true;
+	spin_unlock_irqrestore(&pd->pm_lock, flags);
+#else
 	pm_stay_awake(&pd->dev);
 	pd->sm_queued = true;
+#endif
 
 	if (ms)
 		hrtimer_start(&pd->timer, ms_to_ktime(ms), HRTIMER_MODE_REL);
@@ -612,6 +752,25 @@ static void kick_sm(struct usbpd *pd, int ms)
 		queue_work(pd->wq, &pd->sm_work);
 }
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+static void phy_sig_received(struct usbpd *pd, enum pd_sig_type sig)
+{
+	if (sig != HARD_RESET_SIG) {
+		usbpd_err(&pd->dev, "invalid signal (%d) received\n", sig);
+		return;
+	}
+
+	if (pd->current_state == PE_SRC_DISABLED) {
+		usbpd_err(&pd->dev, "skip hard reset for src disabled already\n");
+		return;
+	}
+
+	usbpd_err(&pd->dev, "hard reset signal received\n");
+
+	atomic_set(&pd->hard_reset_recvd, 1);
+	kick_sm(pd, 0);
+}
+#else
 static void phy_sig_received(struct usbpd *pd, enum pd_sig_type sig)
 {
 	union power_supply_propval val = {1};
@@ -626,11 +785,14 @@ static void phy_sig_received(struct usbpd *pd, enum pd_sig_type sig)
 	/* Force CC logic to source/sink to keep Rp/Rd unchanged */
 	set_power_role(pd, pd->current_pr);
 	pd->hard_reset_recvd = true;
+
 	power_supply_set_property(pd->usb_psy,
 			POWER_SUPPLY_PROP_PD_IN_HARD_RESET, &val);
 
 	kick_sm(pd, 0);
 }
+#endif
+
 
 static void phy_msg_received(struct usbpd *pd, enum pd_sop_type sop,
 		u8 *buf, size_t len)
@@ -662,7 +824,11 @@ static void phy_msg_received(struct usbpd *pd, enum pd_sop_type sop,
 	/* if MSGID already seen, discard */
 	if (PD_MSG_HDR_ID(header) == pd->rx_msgid &&
 			PD_MSG_HDR_TYPE(header) != MSG_SOFT_RESET) {
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		usbpd_err(&pd->dev, "MessageID already seen, discarding\n");
+#else
 		usbpd_dbg(&pd->dev, "MessageID already seen, discarding\n");
+#endif
 		return;
 	}
 
@@ -726,9 +892,17 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 	unsigned long flags;
 	int ret;
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	usbpd_dbg(&pd->dev, "%d->%d\n",
+			pd->current_state, next_state);
+	usbpd_dbg(&pd->dev, "cpr:%d, cdr:%d, tm:%d, ips:%d, psy:%d\n",
+			pd->current_pr, pd->current_dr, 
+			pd->typec_mode, pd->in_pr_swap, pd->psy_type);
+#else
 	usbpd_dbg(&pd->dev, "%s -> %s\n",
 			usbpd_state_strings[pd->current_state],
 			usbpd_state_strings[next_state]);
+#endif
 
 	pd->current_state = next_state;
 
@@ -752,7 +926,11 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 		break;
 
 	case PE_SRC_STARTUP:
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		if (pd->current_dr != DR_DFP) {
+#else
 		if (pd->current_dr == DR_NONE) {
+#endif
 			pd->current_dr = DR_DFP;
 			/*
 			 * Defer starting USB host mode until PE_SRC_READY or
@@ -795,6 +973,12 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 			val.intval = 0;
 			power_supply_set_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_PR_SWAP, &val);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			usbpd_dbg(&pd->dev, "Handling sink->source\n");
+			reset_vdm_state(pd);
+			stop_usb_peripheral(pd);
+#endif
 		}
 
 		/*
@@ -873,6 +1057,11 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 
 	case PE_SRC_READY:
 		pd->in_explicit_contract = true;
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		pd->global_cnt = 0;
+#endif
+
 		if (pd->current_dr == DR_DFP) {
 			/* don't start USB host until after SVDM discovery */
 			if (pd->vdm_state == VDM_NONE)
@@ -920,7 +1109,9 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 
 			if (pd->psy_type == POWER_SUPPLY_TYPE_USB ||
 				pd->psy_type == POWER_SUPPLY_TYPE_USB_CDP ||
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 				pd->psy_type == POWER_SUPPLY_TYPE_USB_FLOAT ||
+#endif
 				usb_compliance_mode)
 				start_usb_peripheral(pd);
 		}
@@ -935,8 +1126,15 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 			break;
 		}
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		if (!val.intval || disable_usb_pd) {
+			usbpd_err(&pd->dev, "pd disabled now\n");
+			break;
+		}
+#else
 		if (!val.intval || disable_usb_pd)
 			break;
+#endif
 
 		pd_reset_protocol(pd);
 
@@ -960,6 +1158,25 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 
 			pd->pd_phy_opened = true;
 		}
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		if (pd->in_pr_swap) {
+			usbpd_dbg(&pd->dev, "Handling source->sink\n");
+			reset_vdm_state(pd);
+
+			val.intval = POWER_SUPPLY_TYPE_USB;
+			power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_REAL_TYPE, &val);
+			pd->psy_type = POWER_SUPPLY_TYPE_USB;
+
+			pd->current_dr = DR_UFP;
+			stop_usb_host(pd);
+			start_usb_peripheral(pd);
+
+			pd_phy_update_roles(pd->current_dr, pd->current_pr);
+			dual_role_instance_changed(pd->dual_role);
+		}
+#endif
 
 		pd->current_voltage = pd->requested_voltage = 5000000;
 		val.intval = pd->requested_voltage; /* set max range to 5V */
@@ -1015,6 +1232,11 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 
 	case PE_SNK_READY:
 		pd->in_explicit_contract = true;
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		pd->global_cnt = 0;
+#endif
+
 		kobject_uevent(&pd->dev.kobj, KOBJ_CHANGE);
 		complete(&pd->is_ready);
 		dual_role_instance_changed(pd->dual_role);
@@ -1022,9 +1244,21 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 
 	case PE_SNK_TRANSITION_TO_DEFAULT:
 		if (pd->current_dr != DR_UFP) {
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			pd->current_dr = DR_UFP;
+#endif
 			stop_usb_host(pd);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			if ((pd->psy_type == POWER_SUPPLY_TYPE_USB)
+				|| (pd->psy_type == POWER_SUPPLY_TYPE_USB_CDP)
+				|| usb_compliance_mode)
+				start_usb_peripheral(pd);
+#else
 			start_usb_peripheral(pd);
 			pd->current_dr = DR_UFP;
+#endif
 			pd_phy_update_roles(pd->current_dr, pd->current_pr);
 		}
 		if (pd->vconn_enabled) {
@@ -1037,6 +1271,9 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 		break;
 
 	case PE_PRS_SNK_SRC_TRANSITION_TO_OFF:
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		usbpd_err(&pd->dev, "going from device to host mode\n");
+#endif
 		val.intval = pd->requested_current = 0; /* suspend charging */
 		power_supply_set_property(pd->usb_psy,
 				POWER_SUPPLY_PROP_PD_CURRENT_MAX, &val);
@@ -1058,6 +1295,11 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 				usbpd_state_strings[pd->current_state]);
 		break;
 	}
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	usbpd_dbg(&pd->dev, "Ended, cs:%d, psy:%d\n", 
+				pd->current_state, pd->psy_type);
+#endif
 }
 
 int usbpd_register_svid(struct usbpd *pd, struct usbpd_svid_handler *hdlr)
@@ -1437,6 +1679,10 @@ static void dr_swap(struct usbpd *pd)
 {
 	reset_vdm_state(pd);
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	usbpd_dbg(&pd->dev,"cpr:%d, cdr:%d\n", pd->current_pr, pd->current_dr);
+#endif
+
 	if (pd->current_dr == DR_DFP) {
 		stop_usb_host(pd);
 		start_usb_peripheral(pd);
@@ -1515,11 +1761,23 @@ static int enable_vbus(struct usbpd *pd)
 		msleep(100);	/* need to wait an additional tCCDebounce */
 
 enable_reg:
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (!pd->vbus_enabled) {
+		usbpd_err(&pd->dev, "[Enable]:otg_vbus\n");
+		ret = regulator_enable(pd->vbus);
+		if (ret)  /* Unable to enable vbus (-22) */
+			usbpd_err(&pd->dev, "Unable to enable vbus (%d)\n", ret);
+
+		pd->vbus_enabled = true;
+	}
+#else
 	ret = regulator_enable(pd->vbus);
 	if (ret)
 		usbpd_err(&pd->dev, "Unable to enable vbus (%d)\n", ret);
 	else
 		pd->vbus_enabled = true;
+#endif
 
 	return ret;
 }
@@ -1555,11 +1813,27 @@ static void usbpd_sm(struct work_struct *w)
 	struct rx_msg *rx_msg = NULL;
 	unsigned long flags;
 
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	usbpd_dbg(&pd->dev, "=> hr:%d, cpr:%d, cdr:%d, cs:%d, ips:%d, psy:%d, cnt:%d, otg_vbus:%d\n",
+			atomic_read(&pd->hard_reset_recvd), 
+			pd->current_pr, pd->current_dr, 
+			pd->current_state, pd->in_pr_swap, 
+			pd->psy_type, pd->global_cnt, pd->vbus_enabled);
+#else
 	usbpd_dbg(&pd->dev, "handle state %s\n",
 			usbpd_state_strings[pd->current_state]);
+#endif
 
 	hrtimer_cancel(&pd->timer);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	spin_lock_irqsave(&pd->pm_lock, flags);
 	pd->sm_queued = false;
+	spin_unlock_irqrestore(&pd->pm_lock, flags);
+#else
+	pd->sm_queued = false;
+#endif
 
 	spin_lock_irqsave(&pd->rx_lock, flags);
 	if (!list_empty(&pd->rx_q)) {
@@ -1567,6 +1841,12 @@ static void usbpd_sm(struct work_struct *w)
 		list_del(&rx_msg->entry);
 	}
 	spin_unlock_irqrestore(&pd->rx_lock, flags);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if(rx_msg)
+		usbpd_dbg(&pd->dev, "rx_msg={%d,%d}\n",
+				rx_msg->type, rx_msg->len);
+#endif
 
 	/* Disconnect? */
 	if (pd->current_pr == PR_NONE) {
@@ -1578,7 +1858,11 @@ static void usbpd_sm(struct work_struct *w)
 			pd->vconn_enabled = false;
 		}
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		usbpd_err(&pd->dev, "USB Type-C disconnect\n");
+#else
 		usbpd_info(&pd->dev, "USB Type-C disconnect\n");
+#endif
 
 		if (pd->pd_phy_opened) {
 			pd_phy_close();
@@ -1588,34 +1872,55 @@ static void usbpd_sm(struct work_struct *w)
 		pd->in_pr_swap = false;
 		pd->pd_connected = false;
 		pd->in_explicit_contract = false;
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		atomic_set(&pd->hard_reset_recvd, 0);
+#else
 		pd->hard_reset_recvd = false;
+#endif
+
 		pd->caps_count = 0;
 		pd->hard_reset_count = 0;
 		pd->requested_voltage = 0;
 		pd->requested_current = 0;
 		pd->selected_pdo = pd->requested_pdo = 0;
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		pd->src_cap_id = 0;
+		pd->global_cnt = 0;
+#endif
+
 		memset(&pd->received_pdos, 0, sizeof(pd->received_pdos));
 		rx_msg_cleanup(pd);
 
 		power_supply_set_property(pd->usb_psy,
 				POWER_SUPPLY_PROP_PD_IN_HARD_RESET, &val);
 
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 		power_supply_set_property(pd->usb_psy,
 				POWER_SUPPLY_PROP_PD_USB_SUSPEND_SUPPORTED,
 				&val);
+#endif
 
 		power_supply_set_property(pd->usb_psy,
 				POWER_SUPPLY_PROP_PD_ACTIVE, &val);
 
 		if (pd->vbus_enabled) {
+			usbpd_err(&pd->dev, "[Disable]:otg_vbus\n");
 			regulator_disable(pd->vbus);
 			pd->vbus_enabled = false;
 		}
 
+	/* WARNING: It's better safe to make sure usb part reset to default mode */
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		stop_usb_host(pd);
+		stop_usb_peripheral(pd);
+#else
 		if (pd->current_dr == DR_UFP)
 			stop_usb_peripheral(pd);
 		else if (pd->current_dr == DR_DFP)
 			stop_usb_host(pd);
+#endif
 
 		pd->current_dr = DR_NONE;
 
@@ -1650,8 +1955,25 @@ static void usbpd_sm(struct work_struct *w)
 	}
 
 	/* Hard reset? */
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (atomic_read(&pd->hard_reset_recvd)) {
+		atomic_set(&pd->hard_reset_recvd, 0);
+#else
 	if (pd->hard_reset_recvd) {
 		pd->hard_reset_recvd = false;
+#endif
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		usbpd_err(&pd->dev, "Handling hard_reset_recvd... cs=%d\n",
+					pd->current_state);
+
+		/* Force CC logic to source/sink to keep Rp/Rd unchanged */
+		set_power_role(pd, pd->current_pr);
+
+		val.intval = 1;
+		power_supply_set_property(pd->usb_psy,
+				POWER_SUPPLY_PROP_PD_IN_HARD_RESET, &val);
+#endif
 
 		if (pd->requested_current) {
 			val.intval = pd->requested_current = 0;
@@ -1672,16 +1994,33 @@ static void usbpd_sm(struct work_struct *w)
 		pd->in_explicit_contract = false;
 		pd->selected_pdo = pd->requested_pdo = 0;
 		pd->rdo = 0;
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		pd->src_cap_id = 0;
+		memset(&pd->received_pdos, 0, sizeof(pd->received_pdos));
+#endif
+
 		rx_msg_cleanup(pd);
 		reset_vdm_state(pd);
 		kobject_uevent(&pd->dev.kobj, KOBJ_CHANGE);
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		if (pd->current_pr == PR_SINK) {
+			usbpd_set_state(pd, PE_SNK_TRANSITION_TO_DEFAULT);
+		} else if (pd->current_pr == PR_SRC) {
+			pd->current_state = PE_SRC_TRANSITION_TO_DEFAULT;
+			kick_sm(pd, PS_HARD_RESET_TIME);
+		} else {
+			kick_sm(pd, PS_HARD_RESET_TIME);
+		}
+#else
 		if (pd->current_pr == PR_SINK) {
 			usbpd_set_state(pd, PE_SNK_TRANSITION_TO_DEFAULT);
 		} else {
 			pd->current_state = PE_SRC_TRANSITION_TO_DEFAULT;
 			kick_sm(pd, PS_HARD_RESET_TIME);
 		}
+#endif
 
 		goto sm_done;
 	}
@@ -1721,6 +2060,28 @@ static void usbpd_sm(struct work_struct *w)
 		break;
 
 	case PE_SRC_SEND_CAPABILITIES:
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		if (pd->global_cnt >= PD_GLOBAL_COUNT) {
+			usbpd_err(&pd->dev, "Source global_cnt exceeded, disabling PD\n");
+
+			enable_vbus(pd);
+			atomic_set(&pd->hard_reset_recvd, 0);
+			rx_msg_cleanup(pd);
+			usbpd_set_state(pd, PE_SRC_DISABLED);
+
+			val.intval = 0;
+			power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_PD_ACTIVE,
+					&val);
+
+			pd->caps_count = 0;
+			pd->hard_reset_count = 0;
+			pd->pd_connected = false;
+
+			start_usb_host(pd, true);
+			break;
+		}
+#endif
 		ret = pd_send_msg(pd, MSG_SOURCE_CAPABILITIES, default_src_caps,
 				ARRAY_SIZE(default_src_caps), SOP_MSG);
 		if (ret) {
@@ -1853,22 +2214,54 @@ static void usbpd_sm(struct work_struct *w)
 		break;
 
 	case PE_SRC_TRANSITION_TO_DEFAULT:
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		if (pd->vconn_enabled) {
+			regulator_disable(pd->vconn);
+			pd->vconn_enabled = false;
+		}
+
+		if (pd->vbus_enabled) {
+			usbpd_err(&pd->dev, "[Disable]:otg_vbus\n");
+			regulator_disable(pd->vbus);
+			pd->vbus_enabled = false;
+		}
+#else
 		if (pd->vconn_enabled)
 			regulator_disable(pd->vconn);
+
 		if (pd->vbus_enabled)
 			regulator_disable(pd->vbus);
+#endif
 
 		if (pd->current_dr != DR_DFP) {
+#if defined(CONFIG_TCT_SDM660_COMMON) 
+			stop_usb_peripheral(pd);
+#else
 			extcon_set_cable_state_(pd->extcon, EXTCON_USB, 0);
+#endif
+
 			pd->current_dr = DR_DFP;
 			pd_phy_update_roles(pd->current_dr, pd->current_pr);
 		}
 
 		msleep(SRC_RECOVER_TIME);
 
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 		pd->vbus_enabled = false;
+#endif
+
 		enable_vbus(pd);
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		if (!pd->vconn_enabled) {
+			ret = regulator_enable(pd->vconn);
+			if (ret) {
+				usbpd_err(&pd->dev, "Unable to enable vconn\n");
+			} else {
+				pd->vconn_enabled = true;
+			}
+		}
+#else
 		if (pd->vconn_enabled) {
 			ret = regulator_enable(pd->vconn);
 			if (ret) {
@@ -1876,6 +2269,7 @@ static void usbpd_sm(struct work_struct *w)
 				pd->vconn_enabled = false;
 			}
 		}
+#endif
 
 		val.intval = 0;
 		power_supply_set_property(pd->usb_psy,
@@ -1889,11 +2283,22 @@ static void usbpd_sm(struct work_struct *w)
 		power_supply_set_property(pd->usb_psy,
 				POWER_SUPPLY_PROP_PD_IN_HARD_RESET, &val);
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		pd->src_cap_id = 0;
+		memset(&pd->received_pdos, 0, sizeof(pd->received_pdos));
+		rx_msg_cleanup(pd);
+		reset_vdm_state(pd);
+#endif
+
 		pd_send_hard_reset(pd);
 		pd->in_explicit_contract = false;
 		pd->rdo = 0;
+
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 		rx_msg_cleanup(pd);
 		reset_vdm_state(pd);
+#endif
+
 		kobject_uevent(&pd->dev.kobj, KOBJ_CHANGE);
 
 		pd->current_state = PE_SRC_TRANSITION_TO_DEFAULT;
@@ -1925,6 +2330,11 @@ static void usbpd_sm(struct work_struct *w)
 
 			break;
 		}
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		else {
+			usbpd_dbg(&pd->dev, "recovery fall through\n");
+		}
+#endif
 		/* else fall-through */
 
 	case PE_SNK_WAIT_FOR_CAPABILITIES:
@@ -1932,6 +2342,31 @@ static void usbpd_sm(struct work_struct *w)
 		val.intval = 0;
 		power_supply_set_property(pd->usb_psy,
 				POWER_SUPPLY_PROP_PR_SWAP, &val);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		if (pd->global_cnt >= PD_GLOBAL_COUNT) {
+			usbpd_err(&pd->dev, "Sink global_cnt exceeded, disabling PD\n");
+
+			rx_msg_cleanup(pd);
+
+			val.intval = 0;
+			power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_PD_IN_HARD_RESET,
+					&val);
+
+			val.intval = 0;
+			power_supply_set_property(pd->usb_psy,
+					POWER_SUPPLY_PROP_PD_ACTIVE, &val);
+
+			if (pd->pd_phy_opened) {
+				pd_phy_close();
+				pd->pd_phy_opened = false;
+			}
+
+			pd->pd_connected = false;
+			break;
+		}
+#endif
 
 		if (IS_DATA(rx_msg, MSG_SOURCE_CAPABILITIES)) {
 			val.intval = 0;
@@ -1949,7 +2384,11 @@ static void usbpd_sm(struct work_struct *w)
 			val.intval = 1;
 			power_supply_set_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_PD_ACTIVE, &val);
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		} else if (pd->hard_reset_count < PD_GLOBAL_COUNT) {
+#else
 		} else if (pd->hard_reset_count < 3) {
+#endif
 			usbpd_set_state(pd, PE_SNK_HARD_RESET);
 		} else {
 			usbpd_dbg(&pd->dev, "Sink hard reset count exceeded, disabling PD\n");
@@ -1975,7 +2414,19 @@ static void usbpd_sm(struct work_struct *w)
 				&& (PD_SRC_PDO_TYPE(pdo) ==
 						PD_SRC_PDO_TYPE_AUGMENTED);
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			usbpd_dbg(&pd->dev, 
+				"spdo=%d, rpdo=%d, pdo=0x%x, pps=%d\n",
+				pd->selected_pdo, pd->requested_pdo, 
+				pdo, same_pps);
+#endif
+
 			usbpd_set_state(pd, PE_SNK_TRANSITION_SINK);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			usbpd_dbg(&pd->dev, "cv=%d, rv=%d\n",
+				pd->current_voltage, pd->requested_voltage);
+#endif
 
 			/* prepare for voltage increase/decrease */
 			val.intval = pd->requested_voltage;
@@ -1994,15 +2445,27 @@ static void usbpd_sm(struct work_struct *w)
 				pd->requested_voltage != pd->current_voltage) {
 				int mv = max(pd->requested_voltage,
 						pd->current_voltage) / 1000;
+#if defined(CONFIG_TCT_SDM660_COMMON)
+				if (!mv)
+					val.intval = 500000;
+				else
+					val.intval = (2500000 / mv) * 1000;
+#else
 				val.intval = (2500000 / mv) * 1000;
+#endif
 				power_supply_set_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_PD_CURRENT_MAX, &val);
 			} else {
 				/* decreasing current? */
 				ret = power_supply_get_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_PD_CURRENT_MAX, &val);
+#if defined(CONFIG_TCT_SDM660_COMMON)
+				if (!ret &&
+					((pd->requested_current * 1000) < val.intval)) {
+#else
 				if (!ret &&
 					pd->requested_current < val.intval) {
+#endif
 					val.intval =
 						pd->requested_current * 1000;
 					power_supply_set_property(pd->usb_psy,
@@ -2044,6 +2507,9 @@ static void usbpd_sm(struct work_struct *w)
 
 			usbpd_set_state(pd, PE_SNK_READY);
 		} else {
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			usbpd_err(&pd->dev, "timeout to wait for MSG_PS_RDY\n");
+#endif
 			/* timed out; go to hard reset */
 			usbpd_set_state(pd, PE_SNK_HARD_RESET);
 		}
@@ -2218,11 +2684,22 @@ static void usbpd_sm(struct work_struct *w)
 		power_supply_set_property(pd->usb_psy,
 				POWER_SUPPLY_PROP_PD_VOLTAGE_MIN, &val);
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		pd->src_cap_id = 0;
+		memset(&pd->received_pdos, 0, sizeof(pd->received_pdos));
+		rx_msg_cleanup(pd);
+		reset_vdm_state(pd);
+#endif
+
 		pd_send_hard_reset(pd);
 		pd->in_explicit_contract = false;
 		pd->selected_pdo = pd->requested_pdo = 0;
 		pd->rdo = 0;
+
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 		reset_vdm_state(pd);
+#endif
+
 		kobject_uevent(&pd->dev.kobj, KOBJ_CHANGE);
 		usbpd_set_state(pd, PE_SNK_TRANSITION_TO_DEFAULT);
 		break;
@@ -2246,6 +2723,9 @@ static void usbpd_sm(struct work_struct *w)
 		break;
 
 	case PE_PRS_SRC_SNK_TRANSITION_TO_OFF:
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		usbpd_err(&pd->dev, "going from host to device mode\n");
+#endif
 		pd->in_pr_swap = true;
 		val.intval = 1;
 		power_supply_set_property(pd->usb_psy,
@@ -2253,6 +2733,9 @@ static void usbpd_sm(struct work_struct *w)
 		pd->in_explicit_contract = false;
 
 		if (pd->vbus_enabled) {
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			usbpd_err(&pd->dev, "[Disable]:otg_vbus\n");
+#endif
 			regulator_disable(pd->vbus);
 			pd->vbus_enabled = false;
 		}
@@ -2329,9 +2812,16 @@ static void usbpd_sm(struct work_struct *w)
 			 * hopefully redundant check but in case not enabled
 			 * avoids unbalanced regulator disable count
 			 */
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			if (pd->vconn_enabled) {
+				regulator_disable(pd->vconn);
+				pd->vconn_enabled = false;
+			}
+#else
 			if (pd->vconn_enabled)
 				regulator_disable(pd->vconn);
 			pd->vconn_enabled = false;
+#endif
 
 			pd->current_state = pd->current_pr == PR_SRC ?
 				PE_SRC_READY : PE_SNK_READY;
@@ -2357,11 +2847,31 @@ sm_done:
 	spin_unlock_irqrestore(&pd->rx_lock, flags);
 
 	/* requeue if there are any new/pending RX messages */
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (!ret) {
+		usbpd_dbg(&pd->dev, "RX msg pending, kick sm again\n");
+		kick_sm(pd, 0);
+	}
+#else
 	if (!ret)
 		kick_sm(pd, 0);
+#endif
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	spin_lock_irqsave(&pd->pm_lock, flags);
+	if (!pd->sm_queued)
+		usbpd_pm_control(pd, false);
+	spin_unlock_irqrestore(&pd->pm_lock, flags);
+#else
 	if (!pd->sm_queued)
 		pm_relax(&pd->dev);
+#endif
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	usbpd_dbg(&pd->dev, "<= rx:%d, pm:%d, cs:%d, ips:%d\n",
+			!ret, pd->sm_queued, 
+			pd->current_state, pd->in_pr_swap);
+#endif
 }
 
 static inline const char *src_current(enum power_supply_typec_mode typec_mode)
@@ -2405,10 +2915,20 @@ static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 		return ret;
 	}
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	usbpd_dbg(&pd->dev, "PE=%d, pd=%d, tm=%d\n",
+			val.intval, pd->pd_connected, typec_mode);
+	if (!val.intval && !pd->pd_connected &&
+			typec_mode != POWER_SUPPLY_TYPEC_NONE) {
+		usbpd_err(&pd->dev,"pe=0, skip\n");
+		return 0;
+	}
+#else
 	/* Don't proceed if PE_START=0 as other props may still change */
 	if (!val.intval && !pd->pd_connected &&
 			typec_mode != POWER_SUPPLY_TYPEC_NONE)
 		return 0;
+#endif
 
 	ret = power_supply_get_property(pd->usb_psy,
 			POWER_SUPPLY_PROP_PRESENT, &val);
@@ -2428,35 +2948,73 @@ static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 
 	pd->psy_type = val.intval;
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	usbpd_err(&pd->dev, "vbus:%d, cs:%d, tm:%d, psy:%d\n",
+			pd->vbus_present, pd->current_state, 
+			typec_mode, pd->psy_type);
+#endif
+
 	/*
 	 * For sink hard reset, state machine needs to know when VBUS changes
 	 *   - when in PE_SNK_TRANSITION_TO_DEFAULT, notify when VBUS falls
 	 *   - when in PE_SNK_DISCOVERY, notify when VBUS rises
 	 */
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (typec_mode 
+		&& ((!pd->vbus_present 
+			&& (pd->current_state == PE_SNK_TRANSITION_TO_DEFAULT)) 
+		|| (pd->vbus_present 
+			&& (pd->current_state == PE_SNK_DISCOVERY))
+		|| (pd->vbus_present && pd->pd_connected 
+			&& pd->current_state == PE_SNK_STARTUP))) {
+		usbpd_err(&pd->dev, "[Warn] tm:%d, vbus:%d, pd:%d, cs:%d\n",
+			typec_mode, pd->vbus_present,
+			pd->pd_connected, pd->current_state);
+#else
 	if (typec_mode && ((!pd->vbus_present &&
 			pd->current_state == PE_SNK_TRANSITION_TO_DEFAULT) ||
 		(pd->vbus_present && pd->current_state == PE_SNK_DISCOVERY))) {
 		usbpd_dbg(&pd->dev, "hard reset: typec mode:%d present:%d\n",
 			typec_mode, pd->vbus_present);
+#endif
 		pd->typec_mode = typec_mode;
 		kick_sm(pd, 0);
 		return 0;
 	}
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (pd->typec_mode == typec_mode) {
+		usbpd_err(&pd->dev, "tm:%d not changed, skip\n",
+				typec_mode);
+		return 0;
+	}
+#else
 	if (pd->typec_mode == typec_mode)
 		return 0;
+#endif
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	usbpd_err(&pd->dev, "tm: %d->%d\n", 
+				pd->typec_mode, typec_mode);
+#endif
 
 	pd->typec_mode = typec_mode;
 
+#if !defined(CONFIG_TCT_SDM660_COMMON)
 	usbpd_dbg(&pd->dev, "typec mode:%d present:%d type:%d orientation:%d\n",
 			typec_mode, pd->vbus_present, pd->psy_type,
 			usbpd_get_plug_orientation(pd));
+#endif
 
 	switch (typec_mode) {
 	/* Disconnect */
 	case POWER_SUPPLY_TYPEC_NONE:
 		if (pd->in_pr_swap) {
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			usbpd_err(&pd->dev, "Ignoring disconnect due to PR swap\n");
+#else
 			usbpd_dbg(&pd->dev, "Ignoring disconnect due to PR swap\n");
+#endif
 			return 0;
 		}
 
@@ -2467,8 +3025,13 @@ static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 	case POWER_SUPPLY_TYPEC_SOURCE_DEFAULT:
 	case POWER_SUPPLY_TYPEC_SOURCE_MEDIUM:
 	case POWER_SUPPLY_TYPEC_SOURCE_HIGH:
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		usbpd_err(&pd->dev, "Type-C Source (%s) connected, cpr=%d\n",
+				src_current(typec_mode), pd->current_pr);
+#else
 		usbpd_info(&pd->dev, "Type-C Source (%s) connected\n",
 				src_current(typec_mode));
+#endif
 
 		/* if waiting for SinkTxOk to start an AMS */
 		if (pd->spec_rev == USBPD_REV_30 &&
@@ -2476,15 +3039,26 @@ static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 			(pd->send_pr_swap || pd->send_dr_swap || pd->vdm_tx))
 			break;
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		if (pd->current_pr == PR_SINK) {
+			usbpd_err(&pd->dev, "cpr already sink, skip\n");
+			return 0;
+		}
+#else
 		if (pd->current_pr == PR_SINK)
 			return 0;
+#endif
 
 		/*
 		 * Unexpected if not in PR swap; need to force disconnect from
 		 * source so we can turn off VBUS, Vconn, PD PHY etc.
 		 */
 		if (pd->current_pr == PR_SRC) {
+#if defined(CONFIG_TCT_SDM660_COMMON)
+			usbpd_err(&pd->dev, "Forcing disconnect from source mode\n");
+#else
 			usbpd_info(&pd->dev, "Forcing disconnect from source mode\n");
+#endif
 			pd->current_pr = PR_NONE;
 			break;
 		}
@@ -2495,9 +3069,15 @@ static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 	/* Source states */
 	case POWER_SUPPLY_TYPEC_SINK_POWERED_CABLE:
 	case POWER_SUPPLY_TYPEC_SINK:
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		usbpd_err(&pd->dev, "Type-C Sink%s connected\n",
+				typec_mode == POWER_SUPPLY_TYPEC_SINK ?
+					"" : " (powered)");
+#else
 		usbpd_info(&pd->dev, "Type-C Sink%s connected\n",
 				typec_mode == POWER_SUPPLY_TYPEC_SINK ?
 					"" : " (powered)");
+#endif
 
 		if (pd->current_pr == PR_SRC)
 			return 0;
@@ -2517,6 +3097,10 @@ static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 		break;
 	}
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	usbpd_dbg(&pd->dev, "queue new sm...\n");
+#endif
+
 	/* queue state machine due to CC state change */
 	kick_sm(pd, 0);
 	return 0;
@@ -2527,15 +3111,29 @@ static enum dual_role_property usbpd_dr_properties[] = {
 	DUAL_ROLE_PROP_MODE,
 	DUAL_ROLE_PROP_PR,
 	DUAL_ROLE_PROP_DR,
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	DUAL_ROLE_PROP_STATE,
+#endif
 };
 
 static int usbpd_dr_get_property(struct dual_role_phy_instance *dual_role,
 		enum dual_role_property prop, unsigned int *val)
 {
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	struct usbpd *pd = NULL;
+
+	if (!dual_role || !val)
+		return -ENODEV;
+
+	pd = dual_role_get_drvdata(dual_role);
+	if (!pd)
+		return -ENODEV;
+#else
 	struct usbpd *pd = dual_role_get_drvdata(dual_role);
 
 	if (!pd)
 		return -ENODEV;
+#endif
 
 	switch (prop) {
 	case DUAL_ROLE_PROP_MODE:
@@ -2563,6 +3161,11 @@ static int usbpd_dr_get_property(struct dual_role_phy_instance *dual_role,
 		else
 			*val = DUAL_ROLE_PROP_DR_NONE;
 		break;
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	case DUAL_ROLE_PROP_STATE:
+		*val = pd->current_state;
+		break;
+#endif
 	default:
 		usbpd_warn(&pd->dev, "unsupported property %d\n", prop);
 		return -ENODATA;
@@ -2571,6 +3174,200 @@ static int usbpd_dr_get_property(struct dual_role_phy_instance *dual_role,
 	return 0;
 }
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+static int usbpd_dr_set_property(struct dual_role_phy_instance *dual_role,
+		enum dual_role_property prop, const unsigned int *val)
+{
+	struct usbpd *pd = NULL;
+	bool do_swap = false;
+
+	if (!dual_role || !val)
+		return -ENODEV;
+
+	pd = dual_role_get_drvdata(dual_role);
+	if (!pd)
+		return -ENODEV;
+
+	switch (prop) {
+	case DUAL_ROLE_PROP_MODE:
+		mutex_lock(&pd->swap_lock);
+		usbpd_dbg(&pd->dev, "Setting mode to %d, cpr=%d\n", 
+					*val, pd->current_pr);
+
+		if (*val == DUAL_ROLE_PROP_MODE_DFP) {
+			if (pd->current_pr == PR_SINK)
+				do_swap = true;
+		} else if (*val == DUAL_ROLE_PROP_MODE_UFP) {
+			if (pd->current_pr == PR_SRC)
+				do_swap = true;
+		} else {
+			usbpd_err(&pd->dev, "invalid params unsupported\n");
+			mutex_unlock(&pd->swap_lock);
+			return -ENOTSUPP;
+		}
+
+		if (do_swap) {
+			if (pd->current_state != PE_SRC_READY &&
+					pd->current_state != PE_SNK_READY) {
+				usbpd_err(&pd->dev, "PD not in Ready state\n");
+				mutex_unlock(&pd->swap_lock);
+				return -EAGAIN;
+			}
+
+			if (pd->current_state == PE_SNK_READY &&
+					!is_sink_tx_ok(pd)) {
+				usbpd_err(&pd->dev, "Rp indicates SinkTxNG\n");
+				mutex_unlock(&pd->swap_lock);
+				return -EAGAIN;
+			}
+
+			reinit_completion(&pd->is_ready);
+			pd->send_pr_swap = true;
+			kick_sm(pd, 0);
+
+			/* wait for operation to complete */
+			if (!wait_for_completion_timeout(&pd->is_ready,
+					msecs_to_jiffies(5000))) {
+				pd->send_pr_swap = false;
+				usbpd_err(&pd->dev, "mode swap timed out\n");
+				mutex_unlock(&pd->swap_lock);
+				return -ETIMEDOUT;
+			}
+
+			if ((*val == DUAL_ROLE_PROP_MODE_DFP &&
+					pd->current_pr != PR_SRC) ||
+				(*val == DUAL_ROLE_PROP_MODE_UFP &&
+					 pd->current_pr != PR_SINK)) {
+				usbpd_err(&pd->dev, "incorrect state (%s) after mode swap\n",
+						pd->current_pr == PR_SRC ? "source" : "sink");
+				mutex_unlock(&pd->swap_lock);
+				return -EPROTO;
+			}
+		}
+		mutex_unlock(&pd->swap_lock);
+		break;
+
+	case DUAL_ROLE_PROP_DR:
+		mutex_lock(&pd->swap_lock);
+		usbpd_dbg(&pd->dev, "Setting data_role to %d\n", *val);
+
+		if (*val == DUAL_ROLE_PROP_DR_HOST) {
+			if (pd->current_dr == DR_UFP)
+				do_swap = true;
+		} else if (*val == DUAL_ROLE_PROP_DR_DEVICE) {
+			if (pd->current_dr == DR_DFP)
+				do_swap = true;
+		} else {
+			usbpd_warn(&pd->dev, "setting data_role to 'none' unsupported\n");
+			mutex_unlock(&pd->swap_lock);
+			return -ENOTSUPP;
+		}
+
+		if (do_swap) {
+			if (pd->current_state != PE_SRC_READY &&
+					pd->current_state != PE_SNK_READY) {
+				usbpd_err(&pd->dev, "data_role swap not allowed: PD not in Ready state\n");
+				mutex_unlock(&pd->swap_lock);
+				return -EAGAIN;
+			}
+
+			if (pd->current_state == PE_SNK_READY &&
+					!is_sink_tx_ok(pd)) {
+				usbpd_err(&pd->dev, "Rp indicates SinkTxNG\n");
+				mutex_unlock(&pd->swap_lock);
+				return -EAGAIN;
+			}
+
+			reinit_completion(&pd->is_ready);
+			pd->send_dr_swap = true;
+			kick_sm(pd, 0);
+
+			/* wait for operation to complete */
+			if (!wait_for_completion_timeout(&pd->is_ready,
+					msecs_to_jiffies(5000))) {
+				usbpd_err(&pd->dev, "data_role swap timed out\n");
+				mutex_unlock(&pd->swap_lock);
+				return -ETIMEDOUT;
+			}
+
+			if ((*val == DUAL_ROLE_PROP_DR_HOST &&
+					pd->current_dr != DR_DFP) ||
+				(*val == DUAL_ROLE_PROP_DR_DEVICE &&
+					 pd->current_dr != DR_UFP)) {
+				usbpd_err(&pd->dev, "incorrect state (%s) after data_role swap\n",
+						pd->current_dr == DR_DFP ?
+						"dfp" : "ufp");
+				mutex_unlock(&pd->swap_lock);
+				return -EPROTO;
+			}
+		}
+		mutex_unlock(&pd->swap_lock);
+		break;
+
+	case DUAL_ROLE_PROP_PR:
+		mutex_lock(&pd->swap_lock);
+		usbpd_dbg(&pd->dev, "Setting power_role to %d\n", *val);
+
+		if (*val == DUAL_ROLE_PROP_PR_SRC) {
+			if (pd->current_pr == PR_SINK)
+				do_swap = true;
+		} else if (*val == DUAL_ROLE_PROP_PR_SNK) {
+			if (pd->current_pr == PR_SRC)
+				do_swap = true;
+		} else {
+			usbpd_warn(&pd->dev, "setting power_role to 'none' unsupported\n");
+			mutex_unlock(&pd->swap_lock);
+			return -ENOTSUPP;
+		}
+
+		if (do_swap) {
+			if (pd->current_state != PE_SRC_READY &&
+					pd->current_state != PE_SNK_READY) {
+				usbpd_err(&pd->dev, "power_role swap not allowed: PD not in Ready state\n");
+				mutex_unlock(&pd->swap_lock);
+				return -EAGAIN;
+			}
+
+			if (pd->current_state == PE_SNK_READY &&
+					!is_sink_tx_ok(pd)) {
+				usbpd_err(&pd->dev, "Rp indicates SinkTxNG\n");
+				mutex_unlock(&pd->swap_lock);
+				return -EAGAIN;
+			}
+
+			reinit_completion(&pd->is_ready);
+			pd->send_pr_swap = true;
+			kick_sm(pd, 0);
+
+			/* wait for operation to complete */
+			if (!wait_for_completion_timeout(&pd->is_ready,
+					msecs_to_jiffies(5000))) {
+				usbpd_err(&pd->dev, "power_role swap timed out\n");
+				mutex_unlock(&pd->swap_lock);
+				return -ETIMEDOUT;
+			}
+
+			if ((*val == DUAL_ROLE_PROP_PR_SRC &&
+					pd->current_pr != PR_SRC) ||
+				(*val == DUAL_ROLE_PROP_PR_SNK &&
+					 pd->current_pr != PR_SINK)) {
+				usbpd_err(&pd->dev, "incorrect state (%s) after power_role swap\n",
+						pd->current_pr == PR_SRC ?
+						"source" : "sink");
+				mutex_unlock(&pd->swap_lock);
+				return -EPROTO;
+			}
+		}
+		mutex_unlock(&pd->swap_lock);
+		break;
+	default:
+		usbpd_warn(&pd->dev, "unsupported property %d\n", prop);
+		return -ENOTSUPP;
+	}
+	usbpd_dbg(&pd->dev, "ended set prop %d as %d\n", prop, *val);
+	return 0;
+}
+#else
 static int usbpd_dr_set_property(struct dual_role_phy_instance *dual_role,
 		enum dual_role_property prop, const unsigned int *val)
 {
@@ -2611,7 +3408,6 @@ static int usbpd_dr_set_property(struct dual_role_phy_instance *dual_role,
 			usbpd_err(&pd->dev, "setting mode timed out\n");
 			return -ETIMEDOUT;
 		}
-
 		break;
 
 	case DUAL_ROLE_PROP_DR:
@@ -2730,10 +3526,21 @@ static int usbpd_dr_set_property(struct dual_role_phy_instance *dual_role,
 
 	return 0;
 }
+#endif
 
 static int usbpd_dr_prop_writeable(struct dual_role_phy_instance *dual_role,
 		enum dual_role_property prop)
 {
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	switch (prop) {
+	case DUAL_ROLE_PROP_MODE:
+	case DUAL_ROLE_PROP_PR:
+		return 1;
+	default:
+		break;
+	}
+	return 0;
+#else
 	struct usbpd *pd = dual_role_get_drvdata(dual_role);
 
 	switch (prop) {
@@ -2748,8 +3555,8 @@ static int usbpd_dr_prop_writeable(struct dual_role_phy_instance *dual_role,
 	default:
 		break;
 	}
-
 	return 0;
+#endif
 }
 
 static int usbpd_uevent(struct device *dev, struct kobj_uevent_env *env)
@@ -2988,6 +3795,15 @@ static ssize_t select_pdo_store(struct device *dev,
 		goto out;
 	}
 
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	if (pd->psy_type != POWER_SUPPLY_TYPE_USB_PD){
+		usbpd_err(&pd->dev, "pd-usb(%d) can't support PPS!\n",
+					pd->psy_type);
+		ret = -EINVAL;
+		goto out;
+	}
+#endif
+
 	ret = sscanf(buf, "%d %d %d %d", &src_cap_id, &pdo, &uv, &ua);
 	if (ret != 2 && ret != 4) {
 		usbpd_err(&pd->dev, "select_pdo: Must specify <src cap id> <PDO> [<uV> <uA>]\n");
@@ -3007,6 +3823,11 @@ static ssize_t select_pdo_store(struct device *dev,
 		ret = -EINVAL;
 		goto out;
 	}
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	usbpd_dbg(&pd->dev, "force id:%d, pdo:%d, uv:%d, ua:%d\n", 
+				src_cap_id, pdo, uv, ua);
+#endif
 
 	ret = pd_select_pdo(pd, pdo, uv, ua);
 	if (ret)
@@ -3268,7 +4089,11 @@ struct usbpd *usbpd_create(struct device *parent)
 
 	pd->usb_psy = power_supply_get_by_name("usb");
 	if (!pd->usb_psy) {
+#if defined(CONFIG_TCT_SDM660_COMMON)
+		usbpd_err(&pd->dev, "Could not get USB power_supply, deferring probe\n");
+#else
 		usbpd_dbg(&pd->dev, "Could not get USB power_supply, deferring probe\n");
+#endif
 		ret = -EPROBE_DEFER;
 		goto destroy_wq;
 	}
@@ -3373,6 +4198,11 @@ struct usbpd *usbpd_create(struct device *parent)
 	pd->current_pr = PR_NONE;
 	pd->current_dr = DR_NONE;
 	list_add_tail(&pd->instance, &_usbpd);
+
+#if defined(CONFIG_TCT_SDM660_COMMON)
+	atomic_set(&pd->hard_reset_recvd, 0);
+	spin_lock_init(&pd->pm_lock);
+#endif
 
 	spin_lock_init(&pd->rx_lock);
 	INIT_LIST_HEAD(&pd->rx_q);

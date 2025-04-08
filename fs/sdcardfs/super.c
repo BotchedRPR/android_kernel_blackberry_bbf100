@@ -215,6 +215,9 @@ static struct inode *sdcardfs_alloc_inode(struct super_block *sb)
 
 	i->data = d;
 	kref_init(&d->refcount);
+	i->top_data = d;
+	spin_lock_init(&i->top_lock);
+	kref_get(&d->refcount);
 
 	i->vfs_inode.i_version = 1;
 	return &i->vfs_inode;
@@ -298,6 +301,13 @@ static int sdcardfs_show_options(struct vfsmount *mnt, struct seq_file *m,
 		seq_printf(m, ",gid=%u", vfsopts->gid);
 	if (opts->multiuser)
 		seq_puts(m, ",multiuser");
+#ifdef CONFIG_BBSECURE_SDAFW
+	if (strlen(opts->primary_only) > 0)
+		seq_printf(m, ",primary_only=%s", opts->primary_only);
+#elif defined(CONFIG_BBSECURE_SDBASE)
+	if (opts->primary_only)
+		seq_puts(m, ",primary_only");
+#endif /* CONFIG_BBSECURE_SDBASE || CONFIG_BBSECURE_SDAFW */
 	if (vfsopts->mask)
 		seq_printf(m, ",mask=%u", vfsopts->mask);
 	if (opts->fs_user_id)

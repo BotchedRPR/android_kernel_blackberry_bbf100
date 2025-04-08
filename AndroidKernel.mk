@@ -1,6 +1,15 @@
 #Android makefile to build kernel as a part of Android Build
 PERL		= perl
 
+ifeq ($(SKIP_HEAVY_CPU_LOAD_ACTION),true)
+ifeq ($(filter kernel,$(MAKECMDGOALS)),)
+TCT_DO_NOT_REBUILD_KERNEL := true
+ifeq ($(wildcard $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr),)
+TCT_DO_NOT_REBUILD_KERNEL := false
+endif
+endif
+endif
+
 KERNEL_TARGET := $(strip $(INSTALLED_KERNEL_TARGET))
 ifeq ($(KERNEL_TARGET),)
 INSTALLED_KERNEL_TARGET := $(PRODUCT_OUT)/kernel
@@ -130,7 +139,17 @@ endif
 $(KERNEL_OUT):
 	mkdir -p $(KERNEL_OUT)
 
+ifneq ($(TCT_DO_NOT_REBUILD_KERNEL),true)
+ifeq ($(BBRY_ANDROID),1)
+$(KERNEL_DEFCONFIG):
+	kernel/kernel_defconfig.py --input kernel/arch/$(KERNEL_ARCH)/configs/$(KERNEL_DEFCONFIG_SOURCE) --overlay "$(subst $(space),;,$(KERNEL_DEFCONFIG_OVERLAY))" --output kernel/arch/$(KERNEL_ARCH)/configs/$(KERNEL_DEFCONFIG)
+endif
+
+ifeq ($(BBRY_ANDROID),1)
+$(KERNEL_CONFIG): $(KERNEL_OUT) $(KERNEL_DEFCONFIG)
+else
 $(KERNEL_CONFIG): $(KERNEL_OUT)
+endif
 	$(MAKE) -C $(TARGET_KERNEL_SOURCE) O=$(BUILD_ROOT_LOC)$(KERNEL_OUT) $(KERNEL_MAKE_ENV) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_DEFCONFIG)
 	$(hide) if [ ! -z "$(KERNEL_CONFIG_OVERRIDE)" ]; then \
 			echo "Overriding kernel config with '$(KERNEL_CONFIG_OVERRIDE)'"; \
@@ -146,7 +165,11 @@ $(TARGET_PREBUILT_INT_KERNEL): $(KERNEL_OUT) $(KERNEL_HEADERS_INSTALL)
 	$(mv-modules)
 	$(clean-module-folder)
 
+ifeq ($(BBRY_ANDROID),1)
+$(KERNEL_HEADERS_INSTALL): $(KERNEL_OUT) $(KERNEL_DEFCONFIG)
+else
 $(KERNEL_HEADERS_INSTALL): $(KERNEL_OUT)
+endif
 	$(hide) if [ ! -z "$(KERNEL_HEADER_DEFCONFIG)" ]; then \
 			rm -f $(BUILD_ROOT_LOC)$(KERNEL_CONFIG); \
 			$(MAKE) -C $(TARGET_KERNEL_SOURCE) O=$(BUILD_ROOT_LOC)$(KERNEL_OUT) $(KERNEL_MAKE_ENV) ARCH=$(KERNEL_HEADER_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) $(KERNEL_HEADER_DEFCONFIG); \
@@ -170,5 +193,6 @@ kernelconfig: $(KERNEL_OUT) $(KERNEL_CONFIG)
 	     $(MAKE) -C $(TARGET_KERNEL_SOURCE) O=$(BUILD_ROOT_LOC)$(KERNEL_OUT) $(KERNEL_MAKE_ENV) ARCH=$(KERNEL_ARCH) CROSS_COMPILE=$(KERNEL_CROSS_COMPILE) savedefconfig
 	cp $(KERNEL_OUT)/defconfig $(TARGET_KERNEL_SOURCE)/arch/$(KERNEL_ARCH)/configs/$(KERNEL_DEFCONFIG)
 
+endif
 endif
 endif

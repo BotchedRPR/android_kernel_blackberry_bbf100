@@ -3,6 +3,7 @@
  *
  * Copyright (C) 2005 John Lenz <lenz@cs.wisc.edu>
  * Copyright (C) 2005 Richard Purdie <rpurdie@openedhand.com>
+ * Copyright (C) 2016 BlackBerry Limited // MODIFIED by Haojun Chen, 2017-07-14,BUG-5066810
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -37,6 +38,11 @@ struct led_classdev {
 	enum led_brightness	 max_brightness;
 	enum led_brightness	 usr_brightness_req;
 	int			 flags;
+/* MODIFIED-BEGIN by Haojun Chen, 2017-07-14,BUG-5066810*/
+#ifdef CONFIG_TCT_SDM660_COMMON
+	bool		 manual_override_en;
+#endif
+/* MODIFIED-END by Haojun Chen,BUG-5066810*/
 
 	/* Lower 16 bits reflect status */
 #define LED_SUSPENDED		(1 << 0)
@@ -51,6 +57,11 @@ struct led_classdev {
 #define LED_DEV_CAP_FLASH	(1 << 23)
 #define LED_KEEP_TRIGGER	(1 << 24)
 
+/* MODIFIED-BEGIN by Haojun Chen, 2017-07-14,BUG-5066810*/
+#ifdef CONFIG_TCT_SDM660_COMMON
+#define LED_LOG_FIRST_BRIGHTNESS (1 << 31)
+#endif
+/* MODIFIED-END by Haojun Chen,BUG-5066810*/
 	/* Set LED brightness level */
 	/* Must not sleep, use a workqueue if needed */
 	void		(*brightness_set)(struct led_classdev *led_cdev,
