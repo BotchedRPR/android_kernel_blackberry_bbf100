@@ -1513,8 +1513,6 @@ static int do_ebt_get_ctl(struct sock *sk, int cmd, void __user *user, int *len)
 	if (copy_from_user(&tmp, user, sizeof(tmp)))
 		return -EFAULT;
 
-	tmp.name[sizeof(tmp.name) - 1] = '\0';
-
 	t = find_table_lock(net, tmp.name, &ret, &ebt_mutex);
 	if (!t)
 		return ret;
@@ -1537,7 +1535,7 @@ static int do_ebt_get_ctl(struct sock *sk, int cmd, void __user *user, int *len)
 			tmp.valid_hooks = t->table->valid_hooks;
 		}
 		mutex_unlock(&ebt_mutex);
-		if (*len > sizeof(tmp) || copy_to_user(user, &tmp, *len) != 0) {
+		if (copy_to_user(user, &tmp, *len) != 0) {
 			BUGPRINT("c2u Didn't work\n");
 			ret = -EFAULT;
 			break;
@@ -2023,9 +2021,7 @@ static int ebt_size_mwt(struct compat_ebt_entry_mwt *match32,
 		if (match_kern)
 			match_kern->match_size = ret;
 
-		if (WARN_ON(type == EBT_COMPAT_TARGET && size_left))
-			return -EINVAL;
-
+		WARN_ON(type == EBT_COMPAT_TARGET && size_left);
 		match32 = (struct compat_ebt_entry_mwt *) buf;
 	}
 
@@ -2082,15 +2078,6 @@ static int size_entry_mwt(struct ebt_entry *entry, const unsigned char *base,
 	 *
 	 * offsets are relative to beginning of struct ebt_entry (i.e., 0).
 	 */
-	for (i = 0; i < 4 ; ++i) {
-		if (offsets[i] >= *total)
-			return -EINVAL;
-		if (i == 0)
-			continue;
-		if (offsets[i-1] > offsets[i])
-			return -EINVAL;
-	}
-
 	for (i = 0, j = 1 ; j < 4 ; j++, i++) {
 		struct compat_ebt_entry_mwt *match32;
 		unsigned int size;
@@ -2341,8 +2328,6 @@ static int compat_do_ebt_get_ctl(struct sock *sk, int cmd,
 	if (copy_from_user(&tmp, user, sizeof(tmp)))
 		return -EFAULT;
 
-	tmp.name[sizeof(tmp.name) - 1] = '\0';
-
 	t = find_table_lock(net, tmp.name, &ret, &ebt_mutex);
 	if (!t)
 		return ret;
@@ -2356,7 +2341,7 @@ static int compat_do_ebt_get_ctl(struct sock *sk, int cmd,
 			goto out;
 		tmp.valid_hooks = t->valid_hooks;
 
-		if (*len > sizeof(tmp) || copy_to_user(user, &tmp, *len) != 0) {
+		if (copy_to_user(user, &tmp, *len) != 0) {
 			ret = -EFAULT;
 			break;
 		}
@@ -2367,7 +2352,7 @@ static int compat_do_ebt_get_ctl(struct sock *sk, int cmd,
 		tmp.entries_size = t->table->entries_size;
 		tmp.valid_hooks = t->table->valid_hooks;
 
-		if (*len > sizeof(tmp) || copy_to_user(user, &tmp, *len) != 0) {
+		if (copy_to_user(user, &tmp, *len) != 0) {
 			ret = -EFAULT;
 			break;
 		}

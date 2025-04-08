@@ -38,7 +38,7 @@ struct wil_platform_ops {
 	void (*uninit)(void *handle);
 	int (*notify)(void *handle, enum wil_platform_event evt);
 	bool (*keep_radio_on_during_sleep)(void *handle);
-} __no_const;
+};
 
 /**
  * struct wil_platform_rops - wil platform module callbacks from

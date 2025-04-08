@@ -34,22 +34,19 @@ handle_futex_death(u32 __user *uaddr, struct task_struct *curr, int pi);
 
 union futex_key {
 	struct {
-		u64 i_seq;
 		unsigned long pgoff;
-		unsigned int offset;
+		struct inode *inode;
+		int offset;
 	} shared;
 	struct {
-		union {
-			    struct mm_struct *mm;
-			    u64 __tmp;
-		};
-	unsigned long address;
-        unsigned int offset;
+		unsigned long address;
+		struct mm_struct *mm;
+		int offset;
 	} private;
 	struct {
-		u64 ptr;
 		unsigned long word;
-		unsigned int offset;
+		void *ptr;
+		int offset;
 	} both;
 };
 

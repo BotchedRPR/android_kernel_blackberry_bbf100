@@ -177,10 +177,11 @@ static int ibnl_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 			}
 
 			{
-				netlink_dump_control_no_const c = {
+				struct netlink_dump_control c = {
 					.dump = client->cb_table[op].dump,
+					.module = client->cb_table[op].module,
 				};
-				return __netlink_dump_start(nls, skb, nlh, &c, NULL, client->cb_table[op].module);
+				return netlink_dump_start(nls, skb, nlh, &c);
 			}
 		}
 	}

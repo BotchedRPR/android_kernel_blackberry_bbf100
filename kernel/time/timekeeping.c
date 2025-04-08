@@ -15,7 +15,6 @@
 #include <linux/init.h>
 #include <linux/mm.h>
 #include <linux/sched.h>
-#include <linux/grsecurity.h>
 #include <linux/syscore_ops.h>
 #include <linux/clocksource.h>
 #include <linux/jiffies.h>
@@ -988,8 +987,6 @@ int do_settimeofday64(const struct timespec64 *ts)
 
 	if (!timespec64_valid_strict(ts))
 		return -EINVAL;
-
-	gr_log_timechange();
 
 	raw_spin_lock_irqsave(&timekeeper_lock, flags);
 	write_seqcount_begin(&tk_core.seq);

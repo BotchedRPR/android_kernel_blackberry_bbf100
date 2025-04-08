@@ -32,9 +32,6 @@
 #include <linux/dnotify.h>
 #include <linux/compat.h>
 
-#define CREATE_TRACE_POINTS
-#include <trace/events/fs.h>
-
 #include "internal.h"
 
 int do_truncate2(struct vfsmount *mnt, struct dentry *dentry, loff_t length,
@@ -115,10 +112,6 @@ long vfs_truncate(struct path *path, loff_t length)
 	error = locks_verify_truncate(inode, NULL, length);
 	if (!error)
 		error = security_path_truncate(path);
-
-	if (!error && !gr_acl_handle_truncate(path->dentry, path->mnt))
-		error = -EACCES;
-
 	if (!error)
 		error = do_truncate2(mnt, path->dentry, length, 0, NULL);
 
@@ -205,10 +198,6 @@ static long do_sys_ftruncate(unsigned int fd, loff_t length, int small)
 	error = locks_verify_truncate(inode, f.file, length);
 	if (!error)
 		error = security_path_truncate(&f.file->f_path);
-
-	if (!error && !gr_acl_handle_truncate(f.file->f_path.dentry, f.file->f_path.mnt))
-		error = -EACCES;
-
 	if (!error)
 		error = do_truncate2(mnt, dentry, length, ATTR_MTIME|ATTR_CTIME, f.file);
 	sb_end_write(inode->i_sb);
@@ -420,9 +409,6 @@ retry:
 	if (__mnt_is_readonly(path.mnt))
 		res = -EROFS;
 
-	if (!res && !gr_acl_handle_access(path.dentry, path.mnt, mode))
-		res = -EACCES;
-
 out_path_release:
 	path_put(&path);
 	if (retry_estale(res, lookup_flags)) {
@@ -451,12 +437,8 @@ retry:
 		goto out;
 
 	error = inode_permission2(path.mnt, path.dentry->d_inode, MAY_EXEC | MAY_CHDIR);
-
-
 	if (error)
 		goto dput_and_out;
-
-	gr_log_chdir(path.dentry, path.mnt);
 
 	set_fs_pwd(current->fs, &path);
 
@@ -489,14 +471,6 @@ SYSCALL_DEFINE1(fchdir, unsigned int, fd)
 		goto out_putf;
 
 	error = inode_permission2(mnt, inode, MAY_EXEC | MAY_CHDIR);
-
-        if (!error && !gr_chroot_fchdir(f.file->f_path.dentry, f.file->f_path.mnt))
-                error = -EPERM;
-
-        if (!error)
-                gr_log_chdir(f.file->f_path.dentry, f.file->f_path.mnt);
-
-
 	if (!error)
 		set_fs_pwd(current->fs, &f.file->f_path);
 out_putf:
@@ -526,13 +500,7 @@ retry:
 	if (error)
 		goto dput_and_out;
 
-	if (gr_handle_chroot_chroot(path.dentry, path.mnt))
-		goto dput_and_out;
-
 	set_fs_root(current->fs, &path);
-
-	gr_handle_chroot_chdir(&path);
-
 	error = 0;
 dput_and_out:
 	path_put(&path);
@@ -556,16 +524,6 @@ static int chmod_common(struct path *path, umode_t mode)
 		return error;
 retry_deleg:
 	mutex_lock(&inode->i_mutex);
-
-	if (!gr_acl_handle_chmod(path->dentry, path->mnt, &mode)) {
-		error = -EACCES;
-		goto out_unlock;
-	}
-	if (gr_handle_chroot_chmod(path->dentry, path->mnt, mode)) {
-		error = -EACCES;
-		goto out_unlock;
-	}
-
 	error = security_path_chmod(path, mode);
 	if (error)
 		goto out_unlock;
@@ -630,9 +588,6 @@ static int chown_common(struct path *path, uid_t user, gid_t group)
 
 	uid = make_kuid(current_user_ns(), user);
 	gid = make_kgid(current_user_ns(), group);
-
-	if (!gr_acl_handle_chown(path->dentry, path->mnt))
-		return -EACCES;
 
 retry_deleg:
 	newattrs.ia_valid =  ATTR_CTIME;
@@ -942,9 +897,6 @@ static inline int build_open_flags(int flags, umode_t mode, struct open_flags *o
 {
 	int lookup_flags = 0;
 	int acc_mode;
-#if defined(CONFIG_BBSECURE_O_BENEATH) || defined(CONFIG_BBSECURE_O_NOSYMLINK)
-	int allow_flags = 0;
-#endif
 
 	/*
 	 * Clear out all open flags we don't know about so that we don't report
@@ -980,18 +932,7 @@ static inline int build_open_flags(int flags, umode_t mode, struct open_flags *o
 		 * If we have O_PATH in the open flag. Then we
 		 * cannot have anything other than the below set of flags
 		 */
-#if defined(CONFIG_BBSECURE_O_BENEATH) || defined(CONFIG_BBSECURE_O_NOSYMLINK)
-		allow_flags = O_DIRECTORY | O_NOFOLLOW | O_PATH;
-#if defined(CONFIG_BBSECURE_O_BENEATH)
-		allow_flags |= O_BENEATH;
-#endif
-#if defined(CONFIG_BBSECURE_O_NOSYMLINK)
-		allow_flags |= O_NOSYMLINK;
-#endif
-		flags &= allow_flags;
-#else
 		flags &= O_DIRECTORY | O_NOFOLLOW | O_PATH;
-#endif
 		acc_mode = 0;
 	} else {
 		acc_mode = MAY_OPEN | ACC_MODE(flags);
@@ -1022,14 +963,6 @@ static inline int build_open_flags(int flags, umode_t mode, struct open_flags *o
 		lookup_flags |= LOOKUP_DIRECTORY;
 	if (!(flags & O_NOFOLLOW))
 		lookup_flags |= LOOKUP_FOLLOW;
-#if defined(CONFIG_BBSECURE_O_BENEATH)
-	if (flags & O_BENEATH)
-		lookup_flags |= LOOKUP_BENEATH;
-#endif
-#if defined(CONFIG_BBSECURE_O_NOSYMLINK)
-	if (flags & O_NOSYMLINK)
-		lookup_flags |= LOOKUP_NOSYMLINK;
-#endif
 	op->lookup_flags = lookup_flags;
 	return 0;
 }
@@ -1109,7 +1042,6 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 		} else {
 			fsnotify_open(f);
 			fd_install(fd, f);
-			trace_do_sys_open(tmp->name, flags, mode);
 		}
 	}
 	putname(tmp);

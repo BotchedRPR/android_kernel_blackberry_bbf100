@@ -2470,8 +2470,7 @@ struct v4l2_ioctl_info {
 				struct file *file, void *fh, void *p);
 	} u;
 	void (*debug)(const void *arg, bool write_only);
-} __do_const;
-typedef struct v4l2_ioctl_info __no_const v4l2_ioctl_info_no_const;
+};
 
 /* This control needs a priority check */
 #define INFO_FL_PRIO	(1 << 0)
@@ -2655,7 +2654,7 @@ static long __video_do_ioctl(struct file *file,
 	struct video_device *vfd = video_devdata(file);
 	const struct v4l2_ioctl_ops *ops = vfd->ioctl_ops;
 	bool write_only = false;
-	v4l2_ioctl_info_no_const default_info;
+	struct v4l2_ioctl_info default_info;
 	const struct v4l2_ioctl_info *info;
 	void *fh = file->private_data;
 	struct v4l2_fh *vfh = NULL;
@@ -2746,7 +2745,7 @@ static int check_array_args(unsigned int cmd, void *parg, size_t *array_size,
 				ret = -EINVAL;
 				break;
 			}
-			*user_ptr = (void __force_user *)buf->m.planes;
+			*user_ptr = (void __user *)buf->m.planes;
 			*kernel_ptr = (void **)&buf->m.planes;
 			*array_size = sizeof(struct v4l2_plane) * buf->length;
 			ret = 1;
@@ -2763,7 +2762,7 @@ static int check_array_args(unsigned int cmd, void *parg, size_t *array_size,
 				ret = -EINVAL;
 				break;
 			}
-			*user_ptr = (void __force_user *)edid->edid;
+			*user_ptr = (void __user *)edid->edid;
 			*kernel_ptr = (void **)&edid->edid;
 			*array_size = edid->blocks * 128;
 			ret = 1;
@@ -2781,7 +2780,7 @@ static int check_array_args(unsigned int cmd, void *parg, size_t *array_size,
 				ret = -EINVAL;
 				break;
 			}
-			*user_ptr = (void __force_user *)ctrls->controls;
+			*user_ptr = (void __user *)ctrls->controls;
 			*kernel_ptr = (void **)&ctrls->controls;
 			*array_size = sizeof(struct v4l2_ext_control)
 				    * ctrls->count;
@@ -2882,7 +2881,7 @@ video_usercopy(struct file *file, unsigned int cmd, unsigned long arg,
 	}
 
 	if (has_array_args) {
-		*kernel_ptr = (void __force_kernel *)user_ptr;
+		*kernel_ptr = (void __force *)user_ptr;
 		if (copy_to_user(user_ptr, mbuf, array_size))
 			err = -EFAULT;
 		goto out_array_args;

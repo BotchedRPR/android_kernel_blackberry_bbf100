@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -60,7 +60,6 @@ enum kgsl_event_results {
 };
 
 #define KGSL_FLAG_WAKE_ON_TOUCH BIT(0)
-#define KGSL_FLAG_SPARSE        BIT(1) // MODIFIED by hongwei.tian, 2020-02-17,BUG-8871042
 
 /*
  * "list" of event types for ftrace symbolic magic
@@ -400,14 +399,13 @@ struct kgsl_context {
 #define pr_context(_d, _c, fmt, args...) \
 		dev_err((_d)->dev, "%s[%d]: " fmt, \
 		_context_comm((_c)), \
-		pid_nr((_c)->proc_priv->pid), ##args)
+		(_c)->proc_priv->pid, ##args)
 
 /**
  * struct kgsl_process_private -  Private structure for a KGSL process (across
  * all devices)
  * @priv: Internal flags, use KGSL_PROCESS_* values
- * @pid: Identification structure for the task owner of the process
- // MODIFIED-END by hongwei.tian, BUG-10459375
+ * @pid: ID for the task owner of the process
  * @comm: task name of the process
  * @mem_lock: Spinlock to protect the process memory lists
  * @refcount: kref object for reference counting the process
@@ -422,7 +420,7 @@ struct kgsl_context {
  */
 struct kgsl_process_private {
 	unsigned long priv;
-	struct pid *pid; // MODIFIED by hongwei.tian, 2020-12-15,BUG-10459375
+	pid_t pid;
 	char comm[TASK_COMM_LEN];
 	spinlock_t mem_lock;
 	struct kref refcount;

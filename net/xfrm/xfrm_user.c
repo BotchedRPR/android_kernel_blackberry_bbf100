@@ -1392,9 +1392,6 @@ static int validate_tmpl(int nr, struct xfrm_user_tmpl *ut, u16 family)
 		if (!ut[i].family)
 			ut[i].family = family;
 
-		if (ut[i].mode >= XFRM_MODE_MAX)
-			return -EINVAL;
-
 		switch (ut[i].family) {
 		case AF_INET:
 			break;
@@ -2481,7 +2478,7 @@ static int xfrm_user_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 			return -EINVAL;
 
 		{
-			netlink_dump_control_no_const c = {
+			struct netlink_dump_control c = {
 				.dump = link->dump,
 				.done = link->done,
 			};

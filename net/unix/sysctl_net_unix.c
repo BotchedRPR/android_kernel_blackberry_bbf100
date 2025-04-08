@@ -28,7 +28,7 @@ static struct ctl_table unix_table[] = {
 
 int __net_init unix_sysctl_register(struct net *net)
 {
-	ctl_table_no_const *table;
+	struct ctl_table *table;
 
 	table = kmemdup(unix_table, sizeof(unix_table), GFP_KERNEL);
 	if (table == NULL)

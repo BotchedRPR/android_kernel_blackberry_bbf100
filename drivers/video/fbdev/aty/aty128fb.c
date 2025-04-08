@@ -145,7 +145,7 @@ enum {
 };
 
 /* Must match above enum */
-static const char * const r128_family[] = {
+static char * const r128_family[] = {
 	"AGP",
 	"PCI",
 	"PRO AGP",

@@ -871,17 +871,11 @@ ext4_find_extent(struct inode *inode, ext4_lblk_t block,
 	struct ext4_extent_header *eh;
 	struct buffer_head *bh;
 	struct ext4_ext_path *path = orig_path ? *orig_path : NULL;
-	int depth, i, ppos = 0;
+	short int depth, i, ppos = 0;
 	int ret;
 
 	eh = ext_inode_hdr(inode);
 	depth = ext_depth(inode);
-	if (depth < 0 || depth > EXT4_MAX_EXTENT_DEPTH) {
-		EXT4_ERROR_INODE(inode, "inode has invalid extent depth: %d",
-				 depth);
-		ret = -EFSCORRUPTED;
-		goto err;
-	}
 
 	if (path) {
 		ext4_ext_drop_refs(path);
@@ -1049,7 +1043,6 @@ static int ext4_ext_split(handle_t *handle, struct inode *inode,
 	__le32 border;
 	ext4_fsblk_t *ablocks = NULL; /* array of allocated blocks */
 	int err = 0;
-	size_t ext_size = 0;
 
 	/* make decision: where to split? */
 	/* FIXME: now decision is simplest: at current extent */
@@ -1141,10 +1134,6 @@ static int ext4_ext_split(handle_t *handle, struct inode *inode,
 		le16_add_cpu(&neh->eh_entries, m);
 	}
 
-	/* zero out unused area in the extent block */
-	ext_size = sizeof(struct ext4_extent_header) +
-		sizeof(struct ext4_extent) * le16_to_cpu(neh->eh_entries);
-	memset(bh->b_data + ext_size, 0, inode->i_sb->s_blocksize - ext_size);
 	ext4_extent_block_csum_set(inode, neh);
 	set_buffer_uptodate(bh);
 	unlock_buffer(bh);
@@ -1224,11 +1213,6 @@ static int ext4_ext_split(handle_t *handle, struct inode *inode,
 				sizeof(struct ext4_extent_idx) * m);
 			le16_add_cpu(&neh->eh_entries, m);
 		}
-		/* zero out unused area in the extent block */
-		ext_size = sizeof(struct ext4_extent_header) +
-		   (sizeof(struct ext4_extent) * le16_to_cpu(neh->eh_entries));
-		memset(bh->b_data + ext_size, 0,
-			inode->i_sb->s_blocksize - ext_size);
 		ext4_extent_block_csum_set(inode, neh);
 		set_buffer_uptodate(bh);
 		unlock_buffer(bh);
@@ -1294,7 +1278,6 @@ static int ext4_ext_grow_indepth(handle_t *handle, struct inode *inode,
 	ext4_fsblk_t newblock, goal = 0;
 	struct ext4_super_block *es = EXT4_SB(inode->i_sb)->s_es;
 	int err = 0;
-	size_t ext_size = 0;
 
 	/* Try to prepend new index to old one */
 	if (ext_depth(inode))
@@ -1320,11 +1303,9 @@ static int ext4_ext_grow_indepth(handle_t *handle, struct inode *inode,
 		goto out;
 	}
 
-	ext_size = sizeof(EXT4_I(inode)->i_data);
 	/* move top-level index/leaf into new block */
-	memmove(bh->b_data, EXT4_I(inode)->i_data, ext_size);
-	/* zero out unused area in the extent block */
-	memset(bh->b_data + ext_size, 0, inode->i_sb->s_blocksize - ext_size);
+	memmove(bh->b_data, EXT4_I(inode)->i_data,
+		sizeof(EXT4_I(inode)->i_data));
 
 	/* set size of new block */
 	neh = ext_block_hdr(bh);

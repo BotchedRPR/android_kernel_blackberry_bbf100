@@ -11,7 +11,6 @@
 #include <linux/irqnr.h>
 #include <linux/cputime.h>
 #include <linux/tick.h>
-#include <linux/grsecurity.h>
 
 #ifndef arch_irq_stat_cpu
 #define arch_irq_stat_cpu(cpu) 0
@@ -88,18 +87,6 @@ static int show_stat(struct seq_file *p, void *v)
 	u64 sum_softirq = 0;
 	unsigned int per_softirq_sums[NR_SOFTIRQS] = {0};
 	struct timespec boottime;
-	int unrestricted = 1;
-
-#ifdef CONFIG_GRKERNSEC_PROC_ADD
-#if defined(CONFIG_GRKERNSEC_PROC_USER) || defined(CONFIG_GRKERNSEC_PROC_USERGROUP)
-	if (!uid_eq(current_uid(), GLOBAL_ROOT_UID)
-#ifdef CONFIG_GRKERNSEC_PROC_USERGROUP
-		&& !in_group_p(grsec_proc_gid)
-#endif
-	)
-		unrestricted = 0;
-#endif
-#endif
 
 	user = nice = system = idle = iowait =
 		irq = softirq = steal = 0;
@@ -112,25 +99,23 @@ static int show_stat(struct seq_file *p, void *v)
 		nice += kcpustat_cpu(i).cpustat[CPUTIME_NICE];
 		system += kcpustat_cpu(i).cpustat[CPUTIME_SYSTEM];
 		idle += get_idle_time(i);
-		if (unrestricted) {
-			iowait += get_iowait_time(i);
-			irq += kcpustat_cpu(i).cpustat[CPUTIME_IRQ];
-			softirq += kcpustat_cpu(i).cpustat[CPUTIME_SOFTIRQ];
-			steal += kcpustat_cpu(i).cpustat[CPUTIME_STEAL];
-			guest += kcpustat_cpu(i).cpustat[CPUTIME_GUEST];
-			guest_nice += kcpustat_cpu(i).cpustat[CPUTIME_GUEST_NICE];
-			sum += kstat_cpu_irqs_sum(i);
-			sum += arch_irq_stat_cpu(i);
-			for (j = 0; j < NR_SOFTIRQS; j++) {
-				unsigned int softirq_stat = kstat_softirqs_cpu(j, i);
+		iowait += get_iowait_time(i);
+		irq += kcpustat_cpu(i).cpustat[CPUTIME_IRQ];
+		softirq += kcpustat_cpu(i).cpustat[CPUTIME_SOFTIRQ];
+		steal += kcpustat_cpu(i).cpustat[CPUTIME_STEAL];
+		guest += kcpustat_cpu(i).cpustat[CPUTIME_GUEST];
+		guest_nice += kcpustat_cpu(i).cpustat[CPUTIME_GUEST_NICE];
+		sum += kstat_cpu_irqs_sum(i);
+		sum += arch_irq_stat_cpu(i);
 
-				per_softirq_sums[j] += softirq_stat;
-				sum_softirq += softirq_stat;
-			}
+		for (j = 0; j < NR_SOFTIRQS; j++) {
+			unsigned int softirq_stat = kstat_softirqs_cpu(j, i);
+
+			per_softirq_sums[j] += softirq_stat;
+			sum_softirq += softirq_stat;
 		}
 	}
-	if (unrestricted)
-		sum += arch_irq_stat();
+	sum += arch_irq_stat();
 
 	seq_puts(p, "cpu ");
 	seq_put_decimal_ull(p, ' ', cputime64_to_clock_t(user));
@@ -151,14 +136,12 @@ static int show_stat(struct seq_file *p, void *v)
 		nice = kcpustat_cpu(i).cpustat[CPUTIME_NICE];
 		system = kcpustat_cpu(i).cpustat[CPUTIME_SYSTEM];
 		idle = get_idle_time(i);
-		if (unrestricted) {
-			iowait = get_iowait_time(i);
-			irq = kcpustat_cpu(i).cpustat[CPUTIME_IRQ];
-			softirq = kcpustat_cpu(i).cpustat[CPUTIME_SOFTIRQ];
-			steal = kcpustat_cpu(i).cpustat[CPUTIME_STEAL];
-			guest = kcpustat_cpu(i).cpustat[CPUTIME_GUEST];
-			guest_nice = kcpustat_cpu(i).cpustat[CPUTIME_GUEST_NICE];
-		}
+		iowait = get_iowait_time(i);
+		irq = kcpustat_cpu(i).cpustat[CPUTIME_IRQ];
+		softirq = kcpustat_cpu(i).cpustat[CPUTIME_SOFTIRQ];
+		steal = kcpustat_cpu(i).cpustat[CPUTIME_STEAL];
+		guest = kcpustat_cpu(i).cpustat[CPUTIME_GUEST];
+		guest_nice = kcpustat_cpu(i).cpustat[CPUTIME_GUEST_NICE];
 		seq_printf(p, "cpu%d", i);
 		seq_put_decimal_ull(p, ' ', cputime64_to_clock_t(user));
 		seq_put_decimal_ull(p, ' ', cputime64_to_clock_t(nice));
@@ -176,7 +159,7 @@ static int show_stat(struct seq_file *p, void *v)
 
 	/* sum again ? it could be updated? */
 	for_each_irq_nr(j)
-		seq_put_decimal_ull(p, ' ', unrestricted ? kstat_irqs_usr(j) : 0ULL);
+		seq_put_decimal_ull(p, ' ', kstat_irqs_usr(j));
 
 	seq_printf(p,
 		"\nctxt %llu\n"
@@ -184,11 +167,11 @@ static int show_stat(struct seq_file *p, void *v)
 		"processes %lu\n"
 		"procs_running %lu\n"
 		"procs_blocked %lu\n",
-		unrestricted ? nr_context_switches() : 0ULL,
+		nr_context_switches(),
 		(unsigned long)jif,
-		unrestricted ? total_forks : 0UL,
-		unrestricted ? nr_running() : 0UL,
-		unrestricted ? nr_iowait() : 0UL);
+		total_forks,
+		nr_running(),
+		nr_iowait());
 
 	seq_printf(p, "softirq %llu", (unsigned long long)sum_softirq);
 

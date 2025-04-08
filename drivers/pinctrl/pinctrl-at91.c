@@ -24,7 +24,6 @@
 #include <linux/pinctrl/pinmux.h>
 /* Since we request GPIOs from ourself */
 #include <linux/pinctrl/consumer.h>
-#include <asm/pgtable.h>
 
 #include "pinctrl-at91.h"
 #include "core.h"
@@ -1614,9 +1613,7 @@ static int at91_gpio_of_irq_setup(struct platform_device *pdev,
 	at91_gpio->pioc_hwirq = irqd_to_hwirq(d);
 
 	/* Setup proper .irq_set_type function */
-	pax_open_kernel();
-	*(void **)&gpio_irqchip.irq_set_type = at91_gpio->ops->irq_type;
-	pax_close_kernel();
+	gpio_irqchip.irq_set_type = at91_gpio->ops->irq_type;
 
 	/* Disable irqs of this PIO controller */
 	writel_relaxed(~0, at91_gpio->regbase + PIO_IDR);

@@ -2600,7 +2600,7 @@ static struct platform_driver rhine_driver_platform = {
 	}
 };
 
-static const struct dmi_system_id rhine_dmi_table[] __initconst = {
+static struct dmi_system_id rhine_dmi_table[] __initdata = {
 	{
 		.ident = "EPIA-M",
 		.matches = {

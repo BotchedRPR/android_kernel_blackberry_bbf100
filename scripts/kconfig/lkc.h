@@ -108,8 +108,7 @@ void menu_add_expr(enum prop_type type, struct expr *expr, struct expr *dep);
 void menu_add_symbol(enum prop_type type, struct symbol *sym, struct expr *dep);
 void menu_add_option(int token, char *arg);
 void menu_finalize(struct menu *parent);
-enum symbol_type;
-void menu_set_type(enum symbol_type type);
+void menu_set_type(int type);
 
 /* util.c */
 struct file *file_lookup(const char *name);
@@ -124,7 +123,7 @@ struct gstr {
 	* when max_width is not zero long lines in string s (if any) get
 	* wrapped not to exceed the max_width value
 	*/
-	size_t max_width;
+	int max_width;
 };
 struct gstr str_new(void);
 void str_free(struct gstr *gs);

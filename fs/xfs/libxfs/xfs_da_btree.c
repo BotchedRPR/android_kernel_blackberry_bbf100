@@ -2012,7 +2012,6 @@ xfs_da_grow_inode_int(
 	struct xfs_inode	*dp = args->dp;
 	int			w = args->whichfork;
 	xfs_rfsblock_t		nblks = dp->i_d.di_nblocks;
-	xfs_rfsblock_t		nblocks;
 	struct xfs_bmbt_irec	map, *mapp;
 	int			nmap, error, got, i, mapi;
 
@@ -2081,8 +2080,7 @@ xfs_da_grow_inode_int(
 	}
 
 	/* account for newly allocated blocks in reserved blocks total */
-	nblocks = dp->i_d.di_nblocks - nblks;
-	args->total -= nblocks;
+	args->total -= dp->i_d.di_nblocks - nblks;
 
 out_free_map:
 	if (mapp != &map)

@@ -497,7 +497,7 @@ static struct ctl_table nf_ct_netfilter_table[] = {
 
 static int nf_conntrack_standalone_init_sysctl(struct net *net)
 {
-	ctl_table_no_const *table;
+	struct ctl_table *table;
 
 	table = kmemdup(nf_ct_sysctl_table, sizeof(nf_ct_sysctl_table),
 			GFP_KERNEL);

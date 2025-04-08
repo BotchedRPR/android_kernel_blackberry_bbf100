@@ -29,7 +29,6 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/bio.h>
-#include <linux/grsecurity.h>
 
 struct linux_binprm;
 struct cred;
@@ -295,11 +294,6 @@ int security_file_receive(struct file *file);
 int security_file_open(struct file *file, const struct cred *cred);
 int security_task_create(unsigned long clone_flags);
 void security_task_free(struct task_struct *task);
-/*start:BBSECURE_BIDE*/
-#ifdef CONFIG_BBSECURE_BIDE
-void security_task_created_notify(struct task_struct *task, unsigned long flags);
-#endif
-/*end:BBSECURE_BIDE*/
 int security_cred_alloc_blank(struct cred *cred, gfp_t gfp);
 void security_cred_free(struct cred *cred);
 int security_prepare_creds(struct cred *new, const struct cred *old, gfp_t gfp);
@@ -329,12 +323,6 @@ int security_task_wait(struct task_struct *p);
 int security_task_prctl(int option, unsigned long arg2, unsigned long arg3,
 			unsigned long arg4, unsigned long arg5);
 void security_task_to_inode(struct task_struct *p, struct inode *inode);
-/*start:BBSECURE_BIDE*/
-#ifdef CONFIG_BBSECURE_BIDE
-int security_task_fix_setgid(struct cred *new, const struct cred *old, int flags);
-int security_task_set_groups(struct group_info *old, struct group_info *new);
-#endif
-/*end:BBSECURE_BIDE*/
 int security_ipc_permission(struct kern_ipc_perm *ipcp, short flag);
 void security_ipc_getsecid(struct kern_ipc_perm *ipcp, u32 *secid);
 int security_msg_msg_alloc(struct msg_msg *msg);

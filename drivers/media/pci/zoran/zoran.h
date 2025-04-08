@@ -178,6 +178,7 @@ struct zoran_fh;
 
 struct zoran_mapping {
 	struct zoran_fh *fh;
+	atomic_t count;
 };
 
 struct zoran_buffer {

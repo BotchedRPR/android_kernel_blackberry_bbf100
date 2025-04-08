@@ -39,12 +39,11 @@
 #define io_pgtable_to_data(x)						\
 	container_of((x), struct arm_lpae_io_pgtable, iop)
 
- 
-#define io_pgtable_ops_to_pgtable(x)                                   \
-        container_of((x), struct io_pgtable, ops)
+#define io_pgtable_ops_to_pgtable(x)					\
+	container_of((x), struct io_pgtable, ops)
 
-#define io_pgtable_ops_to_data(x)                                      \
-        io_pgtable_to_data(io_pgtable_ops_to_pgtable(x))
+#define io_pgtable_ops_to_data(x)					\
+	io_pgtable_to_data(io_pgtable_ops_to_pgtable(x))
 
 /*
  * For consistency with the architecture, we always consider
@@ -1407,7 +1406,6 @@ static struct iommu_gather_ops dummy_tlb_ops __initdata = {
 static void __init arm_lpae_dump_ops(struct io_pgtable_ops *ops)
 {
 	struct arm_lpae_io_pgtable *data = io_pgtable_ops_to_data(ops);
-
 	struct io_pgtable_cfg *cfg = &data->iop.cfg;
 
 	pr_err("cfg: pgsize_bitmap 0x%lx, ias %u-bit\n",

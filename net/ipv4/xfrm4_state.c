@@ -56,7 +56,6 @@ xfrm4_init_temprop(struct xfrm_state *x, const struct xfrm_tmpl *tmpl,
 
 int xfrm4_extract_header(struct sk_buff *skb)
 {
-	unsigned char iph_tmp;
 	const struct iphdr *iph = ip_hdr(skb);
 
 	XFRM_MODE_SKB_CB(skb)->ihl = sizeof(*iph);
@@ -64,8 +63,7 @@ int xfrm4_extract_header(struct sk_buff *skb)
 	XFRM_MODE_SKB_CB(skb)->frag_off = iph->frag_off;
 	XFRM_MODE_SKB_CB(skb)->tos = iph->tos;
 	XFRM_MODE_SKB_CB(skb)->ttl = iph->ttl;
-	iph_tmp = iph->ihl * 4;
-	XFRM_MODE_SKB_CB(skb)->optlen = iph_tmp - sizeof(*iph);
+	XFRM_MODE_SKB_CB(skb)->optlen = iph->ihl * 4 - sizeof(*iph);
 	memset(XFRM_MODE_SKB_CB(skb)->flow_lbl, 0,
 	       sizeof(XFRM_MODE_SKB_CB(skb)->flow_lbl));
 

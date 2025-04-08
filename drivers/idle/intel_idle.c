@@ -1085,10 +1085,8 @@ static void sklh_idle_state_table_update(void)
 			return;
 	}
 
-	pax_open_kernel();
-	*(bool *)&skl_cstates[5].disabled = 1;	/* C8-SKL */
-	*(bool *)&skl_cstates[6].disabled = 1;	/* C9-SKL */
-	pax_close_kernel();
+	skl_cstates[5].disabled = 1;	/* C8-SKL */
+	skl_cstates[6].disabled = 1;	/* C9-SKL */
 }
 /*
  * intel_idle_state_table_update()

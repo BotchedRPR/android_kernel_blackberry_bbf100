@@ -107,7 +107,7 @@ struct ds1307 {
 	u8			offset; /* register's offset */
 	u8			regs[11];
 	u16			nvram_offset;
-	bin_attribute_no_const	*nvram;
+	struct bin_attribute	*nvram;
 	enum ds_type		type;
 	unsigned long		flags;
 #define HAS_NVRAM	0		/* bit 0 == sysfs file active */

@@ -27,8 +27,7 @@ static int seq_show(struct seq_file *m, void *v)
 	if (!task)
 		return -ENOENT;
 
-	if (!gr_acl_handle_procpidmem(task))
-		files = get_files_struct(task);
+	files = get_files_struct(task);
 	put_task_struct(task);
 
 	if (files) {
@@ -259,7 +258,6 @@ static int proc_readfd_common(struct file *file, struct dir_context *ctx,
 				     name, len, instantiate, p,
 				     (void *)(unsigned long)fd))
 			goto out_fd_loop;
-		cond_resched();
 		rcu_read_lock();
 	}
 	rcu_read_unlock();
@@ -297,15 +295,13 @@ int proc_fd_permission(struct inode *inode, int mask)
 	int rv;
 
 	rv = generic_permission(inode, mask);
+	if (rv == 0)
+		return rv;
 
 	rcu_read_lock();
 	p = pid_task(proc_pid(inode), PIDTYPE_PID);
-	if (p) {
-		if (same_thread_group(p, current))
-			rv = 0;
-		if (gr_acl_handle_procpidmem(p))
-			rv = -EACCES;
-	}
+	if (p && same_thread_group(p, current))
+		rv = 0;
 	rcu_read_unlock();
 
 	return rv;

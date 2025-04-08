@@ -842,7 +842,7 @@ ctnetlink_dump_table(struct sk_buff *skb, struct netlink_callback *cb)
 	for (; cb->args[0] < net->ct.htable_size; cb->args[0]++) {
 restart:
 		lockp = &nf_conntrack_locks[cb->args[0] % CONNTRACK_LOCKS];
-		nf_conntrack_lock(lockp);
+		spin_lock(lockp);
 		if (cb->args[0] >= net->ct.htable_size) {
 			spin_unlock(lockp);
 			goto out;
@@ -1186,11 +1186,10 @@ ctnetlink_get_conntrack(struct sock *ctnl, struct sk_buff *skb,
 	int err;
 
 	if (nlh->nlmsg_flags & NLM_F_DUMP) {
-		static struct netlink_dump_control c = {
+		struct netlink_dump_control c = {
 			.dump = ctnetlink_dump_table,
 			.done = ctnetlink_done,
 		};
-		void *data = NULL;
 
 		if (cda[CTA_MARK] && cda[CTA_MARK_MASK]) {
 			struct ctnetlink_filter *filter;
@@ -1199,9 +1198,9 @@ ctnetlink_get_conntrack(struct sock *ctnl, struct sk_buff *skb,
 			if (IS_ERR(filter))
 				return PTR_ERR(filter);
 
-			data = filter;
+			c.data = filter;
 		}
-		return __netlink_dump_start(ctnl, skb, nlh, &c, data, THIS_MODULE);
+		return netlink_dump_start(ctnl, skb, nlh, &c);
 	}
 
 	err = ctnetlink_parse_zone(cda[CTA_ZONE], &zone);
@@ -1339,7 +1338,7 @@ ctnetlink_get_ct_dying(struct sock *ctnl, struct sk_buff *skb,
 		       const struct nlattr * const cda[])
 {
 	if (nlh->nlmsg_flags & NLM_F_DUMP) {
-		static struct netlink_dump_control c = {
+		struct netlink_dump_control c = {
 			.dump = ctnetlink_dump_dying,
 			.done = ctnetlink_done_list,
 		};
@@ -1361,7 +1360,7 @@ ctnetlink_get_ct_unconfirmed(struct sock *ctnl, struct sk_buff *skb,
 			     const struct nlattr * const cda[])
 {
 	if (nlh->nlmsg_flags & NLM_F_DUMP) {
-		static struct netlink_dump_control c = {
+		struct netlink_dump_control c = {
 			.dump = ctnetlink_dump_unconfirmed,
 			.done = ctnetlink_done_list,
 		};
@@ -2045,7 +2044,7 @@ ctnetlink_stat_ct_cpu(struct sock *ctnl, struct sk_buff *skb,
 		      const struct nlattr * const cda[])
 {
 	if (nlh->nlmsg_flags & NLM_F_DUMP) {
-		static struct netlink_dump_control c = {
+		struct netlink_dump_control c = {
 			.dump = ctnetlink_ct_stat_cpu_dump,
 		};
 		return netlink_dump_start(ctnl, skb, nlh, &c);
@@ -2746,7 +2745,7 @@ static int ctnetlink_dump_exp_ct(struct sock *ctnl, struct sk_buff *skb,
 	struct nf_conntrack_tuple_hash *h;
 	struct nf_conn *ct;
 	struct nf_conntrack_zone zone;
-	static struct netlink_dump_control c = {
+	struct netlink_dump_control c = {
 		.dump = ctnetlink_exp_ct_dump_table,
 		.done = ctnetlink_exp_done,
 	};
@@ -2765,8 +2764,9 @@ static int ctnetlink_dump_exp_ct(struct sock *ctnl, struct sk_buff *skb,
 		return -ENOENT;
 
 	ct = nf_ct_tuplehash_to_ctrack(h);
+	c.data = ct;
 
-	err = __netlink_dump_start(ctnl, skb, nlh, &c, ct, THIS_MODULE);
+	err = netlink_dump_start(ctnl, skb, nlh, &c);
 	nf_ct_put(ct);
 
 	return err;
@@ -2790,7 +2790,7 @@ ctnetlink_get_expect(struct sock *ctnl, struct sk_buff *skb,
 		if (cda[CTA_EXPECT_MASTER])
 			return ctnetlink_dump_exp_ct(ctnl, skb, nlh, cda);
 		else {
-			static struct netlink_dump_control c = {
+			struct netlink_dump_control c = {
 				.dump = ctnetlink_exp_dump_table,
 				.done = ctnetlink_exp_done,
 			};
@@ -3252,7 +3252,7 @@ ctnetlink_stat_exp_cpu(struct sock *ctnl, struct sk_buff *skb,
 		       const struct nlattr * const cda[])
 {
 	if (nlh->nlmsg_flags & NLM_F_DUMP) {
-		static struct netlink_dump_control c = {
+		struct netlink_dump_control c = {
 			.dump = ctnetlink_exp_stat_cpu_dump,
 		};
 		return netlink_dump_start(ctnl, skb, nlh, &c);

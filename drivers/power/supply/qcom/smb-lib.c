@@ -5106,6 +5106,7 @@ static void smblib_handle_typec_cc_state_change(struct smb_charger *chg)
 				smblib_typec_mode_name[chg->typec_mode]);
 }
 
+
 static void smblib_usb_typec_change(struct smb_charger *chg)
 {
 	int rc;
@@ -5117,13 +5118,6 @@ static void smblib_usb_typec_change(struct smb_charger *chg)
 		return;
 	}
 
-#if defined(CONFIG_TCT_SDM660_COMMON)
-	smblib_err(chg, "ts={0x%x,0x%x,0x%x,0x%x,0x%x}\n",
-				chg->typec_status[0], chg->typec_status[1],
-				chg->typec_status[2], chg->typec_status[3],
-				chg->typec_status[4]);
-#endif
-
 	smblib_handle_typec_cc_state_change(chg);
 
 	if (chg->typec_status[3] & TYPEC_VBUS_ERROR_STATUS_BIT)
@@ -5132,15 +5126,7 @@ static void smblib_usb_typec_change(struct smb_charger *chg)
 	if (chg->typec_status[3] & TYPEC_VCONN_OVERCURR_STATUS_BIT)
 		schedule_work(&chg->vconn_oc_work);
 
-#if defined(CONFIG_TCT_SDM660_COMMON)
-	smblib_err(chg, "[TYPEC]notifying pd...\n");
-#endif
-
 	power_supply_changed(chg->usb_psy);
-
-#if defined(CONFIG_TCT_SDM660_COMMON)
-	power_supply_flush_work(chg->usb_psy);
-#endif
 }
 
 irqreturn_t smblib_handle_usb_typec_change(int irq, void *data)

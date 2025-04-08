@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2017,2020-2021, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -197,7 +197,7 @@ void kgsl_process_init_sysfs(struct kgsl_device *device,
 	/* Keep private valid until the sysfs enries are removed. */
 	kgsl_process_private_get(private);
 
-	snprintf(name, sizeof(name), "%d", pid_nr(private->pid)); // MODIFIED by hongwei.tian, 2020-12-15,BUG-10459375
+	snprintf(name, sizeof(name), "%d", private->pid);
 
 	if (kobject_init_and_add(&private->kobj, &ktype_mem_entry,
 		kgsl_driver.prockobj, name)) {
@@ -368,6 +368,8 @@ static int kgsl_page_alloc_vmfault(struct kgsl_memdesc *memdesc,
 		get_page(page);
 		vmf->page = page;
 
+		memdesc->mapsize += PAGE_SIZE;
+
 		return 0;
 	}
 
@@ -496,6 +498,8 @@ static int kgsl_contiguous_vmfault(struct kgsl_memdesc *memdesc,
 		return VM_FAULT_OOM;
 	else if (ret == -EFAULT)
 		return VM_FAULT_SIGBUS;
+
+	memdesc->mapsize += PAGE_SIZE;
 
 	return VM_FAULT_NOPAGE;
 }

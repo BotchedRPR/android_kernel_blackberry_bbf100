@@ -128,10 +128,7 @@ static struct pci_driver sis_pci_driver = {
 
 static int __init sis_init(void)
 {
-	pax_open_kernel();
-	*(int *)&driver.num_ioctls = sis_max_ioctl;
-	pax_close_kernel();
-
+	driver.num_ioctls = sis_max_ioctl;
 	return drm_pci_init(&driver, &sis_pci_driver);
 }
 

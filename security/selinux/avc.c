@@ -34,12 +34,6 @@
 #include "avc_ss.h"
 #include "classmap.h"
 
-// start:BBSECURE_BIDE
-#ifdef CONFIG_BBSECURE_BIDE
-#include <linux/netlink.h>
-#endif /* CONFIG_BBSECURE_BIDE */
-// end:BBSECURE_BIDE
-
 #define AVC_CACHE_SLOTS			512
 #define AVC_DEF_CACHE_THRESHOLD		512
 #define AVC_CACHE_RECLAIM		16
@@ -77,7 +71,7 @@ struct avc_xperms_node {
 struct avc_cache {
 	struct hlist_head	slots[AVC_CACHE_SLOTS]; /* head for avc_node->list */
 	spinlock_t		slots_lock[AVC_CACHE_SLOTS]; /* lock for writes */
-	atomic_unchecked_t	lru_hint;	/* LRU hint for reclaim scan */
+	atomic_t		lru_hint;	/* LRU hint for reclaim scan */
 	atomic_t		active_nodes;
 	u32			latest_notif;	/* latest revocation notification */
 };
@@ -87,17 +81,6 @@ struct avc_callback_node {
 	u32 events;
 	struct avc_callback_node *next;
 };
-
-// start:BBSECURE_BIDE
-#ifdef CONFIG_BBSECURE_BIDE
-struct audit_buffer {
-	struct list_head	list;
-	struct sk_buff		*skb;		/* formatted skb ready to send */
-	struct audit_context	*ctx;		/* NULL or associated context */
-	gfp_t			gfp_mask;
-};
-#endif /* CONFIG_BBSECURE_BIDE */
-// end:BBSECURE_BIDE
 
 /* Exported via selinufs */
 unsigned int avc_cache_threshold = AVC_DEF_CACHE_THRESHOLD;
@@ -112,13 +95,6 @@ static struct kmem_cache *avc_node_cachep;
 static struct kmem_cache *avc_xperms_data_cachep;
 static struct kmem_cache *avc_xperms_decision_cachep;
 static struct kmem_cache *avc_xperms_cachep;
-
-// start:BBSECURE_BIDE
-#ifdef CONFIG_BBSECURE_BIDE
-typedef void (*audit_callback) (char *buffer);
-static audit_callback current_audit_callback;
-#endif /* CONFIG_BBSECURE_BIDE */
-// end:BBSECURE_BIDE
 
 static inline int avc_hash(u32 ssid, u32 tsid, u16 tclass)
 {
@@ -207,7 +183,7 @@ void __init avc_init(void)
 		spin_lock_init(&avc_cache.slots_lock[i]);
 	}
 	atomic_set(&avc_cache.active_nodes, 0);
-	atomic_set_unchecked(&avc_cache.lru_hint, 0);
+	atomic_set(&avc_cache.lru_hint, 0);
 
 	avc_node_cachep = kmem_cache_create("avc_node", sizeof(struct avc_node),
 					0, SLAB_PANIC, NULL);
@@ -545,7 +521,7 @@ static inline int avc_reclaim_node(void)
 	spinlock_t *lock;
 
 	for (try = 0, ecx = 0; try < AVC_CACHE_SLOTS; try++) {
-		hvalue = atomic_inc_return_unchecked(&(avc_cache.lru_hint)) & (AVC_CACHE_SLOTS - 1);
+		hvalue = atomic_inc_return(&avc_cache.lru_hint) & (AVC_CACHE_SLOTS - 1);
 		head = &avc_cache.slots[hvalue];
 		lock = &avc_cache.slots_lock[hvalue];
 
@@ -726,24 +702,6 @@ out:
 	return node;
 }
 
-// start:BBSECURE_BIDE
-#ifdef CONFIG_BBSECURE_BIDE
-/**
- * avc_set_current_audit_callback - Register a callback after a report
- * is logged.
- * @audit_callback: the audit callback to register
- */
-int avc_set_current_audit_callback(void (*audit_callback) (char *buffer))
-{
-	if (!audit_callback || current_audit_callback)
-		return -EINVAL;
-
-	current_audit_callback = audit_callback;
-	return 0;
-}
-#endif /* CONFIG_BBSECURE_BIDE */
-// end:BBSECURE_BIDE
-
 /**
  * avc_audit_pre_callback - SELinux specific information
  * will be called by generic audit code
@@ -753,21 +711,11 @@ int avc_set_current_audit_callback(void (*audit_callback) (char *buffer))
 static void avc_audit_pre_callback(struct audit_buffer *ab, void *a)
 {
 	struct common_audit_data *ad = a;
-// start:BBSECURE_BIDE
-#ifdef CONFIG_BBSECURE_BIDE
-	if (ad->selinux_audit_data->denied) {
-#endif
-// end:BBSECURE_BIDE
-		audit_log_format(ab, "avc:  %s ",
-				 ad->selinux_audit_data->denied ? "denied" : "granted");
-		avc_dump_av(ab, ad->selinux_audit_data->tclass,
-				ad->selinux_audit_data->audited);
-		audit_log_format(ab, " for ");
-// start:BBSECURE_BIDE
-#ifdef CONFIG_BBSECURE_BIDE
-	}
-#endif
-// end:BBSECURE_BIDE
+	audit_log_format(ab, "avc:  %s ",
+			 ad->selinux_audit_data->denied ? "denied" : "granted");
+	avc_dump_av(ab, ad->selinux_audit_data->tclass,
+			ad->selinux_audit_data->audited);
+	audit_log_format(ab, " for ");
 }
 
 /**
@@ -786,12 +734,6 @@ static void avc_audit_post_callback(struct audit_buffer *ab, void *a)
 	if (ad->selinux_audit_data->denied) {
 		audit_log_format(ab, " permissive=%u",
 				 ad->selinux_audit_data->result ? 0 : 1);
-// start:BBSECURE_BIDE
-#ifdef CONFIG_BBSECURE_BIDE
-		if (current_audit_callback)
-			current_audit_callback(ab->skb->head + sizeof(struct nlmsghdr));
-#endif /* CONFIG_BBSECURE_BIDE */
-// end:BBSECURE_BIDE
 	}
 }
 

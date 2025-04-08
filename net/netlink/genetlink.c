@@ -573,24 +573,26 @@ static int genl_family_rcv_msg(struct genl_family *family,
 			return -EOPNOTSUPP;
 
 		if (!family->parallel_ops) {
-			static struct netlink_dump_control c = {
+			struct netlink_dump_control c = {
+				.module = family->module,
+				/* we have const, but the netlink API doesn't */
+				.data = (void *)ops,
 				.dump = genl_lock_dumpit,
 				.done = genl_lock_done,
 			};
-			/* we have const, but the netlink API doesn't */
-			void *data = (void *)ops;
 
 			genl_unlock();
-			rc = __netlink_dump_start(net->genl_sock, skb, nlh, &c, data, family->module);
+			rc = __netlink_dump_start(net->genl_sock, skb, nlh, &c);
 			genl_lock();
 
 		} else {
-			netlink_dump_control_no_const c = {
+			struct netlink_dump_control c = {
+				.module = family->module,
 				.dump = ops->dumpit,
 				.done = ops->done,
 			};
 
-			rc = __netlink_dump_start(net->genl_sock, skb, nlh, &c, NULL, family->module);
+			rc = __netlink_dump_start(net->genl_sock, skb, nlh, &c);
 		}
 
 		return rc;

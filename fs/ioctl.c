@@ -15,7 +15,6 @@
 #include <linux/writeback.h>
 #include <linux/buffer_head.h>
 #include <linux/falloc.h>
-#include "internal.h"
 
 #include <asm/ioctls.h>
 
@@ -33,7 +32,8 @@
  *
  * Returns 0 on success, -errno on error.
  */
-long vfs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+static long vfs_ioctl(struct file *filp, unsigned int cmd,
+		      unsigned long arg)
 {
 	int error = -ENOTTY;
 

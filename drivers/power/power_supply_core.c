@@ -28,10 +28,7 @@ EXPORT_SYMBOL_GPL(power_supply_class);
 ATOMIC_NOTIFIER_HEAD(power_supply_notifier);
 EXPORT_SYMBOL_GPL(power_supply_notifier);
 
-extern const struct attribute_group *power_supply_attr_groups[];
-static struct device_type power_supply_dev_type = {
-	.groups = power_supply_attr_groups,
-};
+static struct device_type power_supply_dev_type;
 
 #define POWER_SUPPLY_DEFERRED_REGISTER_TIME	msecs_to_jiffies(10)
 
@@ -125,16 +122,6 @@ void power_supply_changed(struct power_supply *psy)
 	schedule_work(&psy->changed_work);
 }
 EXPORT_SYMBOL_GPL(power_supply_changed);
-
-#if defined(CONFIG_TCT_SDM660_COMMON)
-void power_supply_flush_work(struct power_supply *psy)
-{
-	if (psy) {
-		flush_work(&psy->changed_work);
-	}
-}
-EXPORT_SYMBOL_GPL(power_supply_flush_work);
-#endif
 
 /*
  * Notify that power supply was registered after parent finished the probing.
@@ -978,7 +965,7 @@ static int __init power_supply_class_init(void)
 		return PTR_ERR(power_supply_class);
 
 	power_supply_class->dev_uevent = power_supply_uevent;
-	power_supply_init_attrs();
+	power_supply_init_attrs(&power_supply_dev_type);
 
 	return 0;
 }

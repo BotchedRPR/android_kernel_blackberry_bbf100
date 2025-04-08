@@ -1,8 +1,6 @@
 #ifndef __PACKET_INTERNAL_H__
 #define __PACKET_INTERNAL_H__
 
-#include <linux/refcount.h>
-
 struct packet_mclist {
 	struct packet_mclist	*next;
 	int			ifindex;
@@ -88,16 +86,16 @@ struct packet_fanout {
 	struct list_head	list;
 	struct sock		*arr[PACKET_FANOUT_MAX];
 	spinlock_t		lock;
-	refcount_t		sk_ref;
+	atomic_t		sk_ref;
 	struct packet_type	prot_hook ____cacheline_aligned_in_smp;
 };
 
 struct packet_rollover {
 	int			sock;
 	struct rcu_head		rcu;
-	atomic_long_unchecked_t	num;
-	atomic_long_unchecked_t	num_huge;
-	atomic_long_unchecked_t	num_failed;
+	atomic_long_t		num;
+	atomic_long_t		num_huge;
+	atomic_long_t		num_failed;
 #define ROLLOVER_HLEN	(L1_CACHE_BYTES / sizeof(u32))
 	u32			history[ROLLOVER_HLEN] ____cacheline_aligned;
 } ____cacheline_aligned_in_smp;

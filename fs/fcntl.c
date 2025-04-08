@@ -102,10 +102,6 @@ void __f_setown(struct file *filp, struct pid *pid, enum pid_type type,
 		int force)
 {
 	security_file_set_fowner(filp);
-	if (gr_handle_chroot_fowner(pid, type))
-		return;
-	if (gr_check_protected_task_fowner(pid, type))
-		return;
 	f_modown(filp, pid, type, force);
 }
 EXPORT_SYMBOL(__f_setown);
@@ -744,13 +740,7 @@ static int __init fcntl_init(void)
 	 * Exceptions: O_NONBLOCK is a two bit define on parisc; O_NDELAY
 	 * is defined as O_NONBLOCK on some platforms and not on others.
 	 */
-#if defined(CONFIG_BBSECURE_O_BENEATH) && defined(CONFIG_BBSECURE_O_NOSYMLINK)
-	BUILD_BUG_ON(23 - 1 /* for O_RDONLY being 0 */ !=
-#elif defined(CONFIG_BBSECURE_O_BENEATH) || defined(CONFIG_BBSECURE_O_NOSYMLINK)
-	BUILD_BUG_ON(22 - 1 /* for O_RDONLY being 0 */ !=
-#else
 	BUILD_BUG_ON(21 - 1 /* for O_RDONLY being 0 */ !=
-#endif
 		HWEIGHT32(
 			(VALID_OPEN_FLAGS & ~(O_NONBLOCK | O_NDELAY)) |
 			__FMODE_EXEC | __FMODE_NONOTIFY));

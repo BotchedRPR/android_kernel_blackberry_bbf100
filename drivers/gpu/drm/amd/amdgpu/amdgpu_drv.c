@@ -481,7 +481,7 @@ static struct drm_driver kms_driver = {
 	.driver_features =
 	    DRIVER_USE_AGP |
 	    DRIVER_HAVE_IRQ | DRIVER_IRQ_SHARED | DRIVER_GEM |
-	    DRIVER_PRIME | DRIVER_RENDER | DRIVER_MODESET,
+	    DRIVER_PRIME | DRIVER_RENDER,
 	.dev_priv_size = 0,
 	.load = amdgpu_driver_load_kms,
 	.open = amdgpu_driver_open_kms,
@@ -532,6 +532,9 @@ static struct drm_driver kms_driver = {
 	.patchlevel = KMS_DRIVER_PATCHLEVEL,
 };
 
+static struct drm_driver *driver;
+static struct pci_driver *pdriver;
+
 static struct pci_driver amdgpu_kms_pci_driver = {
 	.name = DRIVER_NAME,
 	.id_table = pciidlist,
@@ -549,23 +552,22 @@ static int __init amdgpu_init(void)
 	}
 #endif
 	DRM_INFO("amdgpu kernel modesetting enabled.\n");
-
-	pax_open_kernel();
-	*(int *)&kms_driver.num_ioctls = amdgpu_max_kms_ioctl;
-	pax_close_kernel();
-
+	driver = &kms_driver;
+	pdriver = &amdgpu_kms_pci_driver;
+	driver->driver_features |= DRIVER_MODESET;
+	driver->num_ioctls = amdgpu_max_kms_ioctl;
 	amdgpu_register_atpx_handler();
 
 	amdgpu_amdkfd_init();
 
 	/* let modprobe override vga console setting */
-	return drm_pci_init(&kms_driver, &amdgpu_kms_pci_driver);
+	return drm_pci_init(driver, pdriver);
 }
 
 static void __exit amdgpu_exit(void)
 {
 	amdgpu_amdkfd_fini();
-	drm_pci_exit(&kms_driver, &amdgpu_kms_pci_driver);
+	drm_pci_exit(driver, pdriver);
 	amdgpu_unregister_atpx_handler();
 }
 

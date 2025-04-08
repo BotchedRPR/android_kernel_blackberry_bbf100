@@ -831,7 +831,7 @@ static int mpls_dev_sysctl_register(struct net_device *dev,
 				    struct mpls_dev *mdev)
 {
 	char path[sizeof("net/mpls/conf/") + IFNAMSIZ];
-	ctl_table_no_const *table;
+	struct ctl_table *table;
 	int i;
 
 	table = kmemdup(&mpls_dev_table, sizeof(mpls_dev_table), GFP_KERNEL);
@@ -1492,7 +1492,7 @@ static int mpls_platform_labels(struct ctl_table *table, int write,
 	struct net *net = table->data;
 	int platform_labels = net->mpls.platform_labels;
 	int ret;
-	ctl_table_no_const tmp = {
+	struct ctl_table tmp = {
 		.procname	= table->procname,
 		.data		= &platform_labels,
 		.maxlen		= sizeof(int),
@@ -1522,7 +1522,7 @@ static const struct ctl_table mpls_table[] = {
 
 static int mpls_net_init(struct net *net)
 {
-	ctl_table_no_const *table;
+	struct ctl_table *table;
 
 	net->mpls.platform_labels = 0;
 	net->mpls.platform_label = NULL;

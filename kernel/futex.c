@@ -124,16 +124,16 @@
  *   futex_wait(futex, val);
  *
  *   waiters++; (a)
- *   smp_mb(); (A) <-- paired with -.
- *                                  |
- *   lock(hash_bucket(futex));      |
- *                                  |
- *   uval = *futex;                 |
- *                                  |        *futex = newval;
- *                                  |        sys_futex(WAKE, futex);
- *                                  |          futex_wake(futex);
- *                                  |
- *                                  `--------> smp_mb(); (B)
+ *   mb(); (A) <-- paired with -.
+ *                              |
+ *   lock(hash_bucket(futex));  |
+ *                              |
+ *   uval = *futex;             |
+ *                              |        *futex = newval;
+ *                              |        sys_futex(WAKE, futex);
+ *                              |          futex_wake(futex);
+ *                              |
+ *                              `------->  mb(); (B)
  *   if (uval == val)
  *     queue();
  *     unlock(hash_bucket(futex));
@@ -202,7 +202,7 @@ struct futex_pi_state {
 	atomic_t refcount;
 
 	union futex_key key;
-} __randomize_layout;
+};
 
 /**
  * struct futex_q - The hashed futex queue entry, one per waiting task
@@ -236,7 +236,7 @@ struct futex_q {
 	struct rt_mutex_waiter *rt_waiter;
 	union futex_key *requeue_pi_key;
 	u32 bitset;
-} __randomize_layout;
+};
 
 static const struct futex_q futex_q_init = {
 	/* list gets initialized in queue_me()*/
@@ -334,7 +334,7 @@ static inline void futex_get_mm(union futex_key *key)
 	/*
 	 * Ensure futex_get_mm() implies a full barrier such that
 	 * get_futex_key() implies a full barrier. This is relied upon
-	 * as smp_mb(); (B), see the ordering comment above.
+	 * as full barrier (B), see the ordering comment above.
 	 */
 	smp_mb__after_atomic();
 }
@@ -407,10 +407,10 @@ static void get_futex_key_refs(union futex_key *key)
 
 	switch (key->both.offset & (FUT_OFF_INODE|FUT_OFF_MMSHARED)) {
 	case FUT_OFF_INODE:
-		smp_mb();		/* explicit smp_mb(); (B) */
+		ihold(key->shared.inode); /* implies MB (B) */
 		break;
 	case FUT_OFF_MMSHARED:
-		futex_get_mm(key); /* implies smp_mb(); (B) */
+		futex_get_mm(key); /* implies MB (B) */
 		break;
 	default:
 		/*
@@ -418,7 +418,7 @@ static void get_futex_key_refs(union futex_key *key)
 		 * mm, therefore the only purpose of calling get_futex_key_refs
 		 * is because we need the barrier for the lockless waiter check.
 		 */
-		smp_mb(); /* explicit smp_mb(); (B) */
+		smp_mb(); /* explicit MB (B) */
 	}
 }
 
@@ -438,50 +438,11 @@ static void drop_futex_key_refs(union futex_key *key)
 
 	switch (key->both.offset & (FUT_OFF_INODE|FUT_OFF_MMSHARED)) {
 	case FUT_OFF_INODE:
+		iput(key->shared.inode);
 		break;
 	case FUT_OFF_MMSHARED:
 		mmdrop(key->private.mm);
 		break;
-	}
-}
-
-/*
- * Generate a machine wide unique identifier for this inode.
- *
- * This relies on u64 not wrapping in the life-time of the machine; which with
- * 1ns resolution means almost 585 years.
- *
- * This further relies on the fact that a well formed program will not unmap
- * the file while it has a (shared) futex waiting on it. This mapping will have
- * a file reference which pins the mount and inode.
- *
- * If for some reason an inode gets evicted and read back in again, it will get
- * a new sequence number and will _NOT_ match, even though it is the exact same
- * file.
- *
- * It is important that match_futex() will never have a false-positive, esp.
- * for PI futexes that can mess up the state. The above argues that false-negatives
- * are only possible for malformed programs.
- */
-static u64 get_inode_sequence_number(struct inode *inode)
-{
-	static atomic64_t i_seq;
-	u64 old;
-
-	/* Does the inode already have a sequence number? */
-	old = atomic64_read(&inode->i_sequence);
-	if (likely(old))
-		return old;
-
-	for (;;) {
-		u64 new = atomic64_add_return(1, &i_seq);
-		if (WARN_ON_ONCE(!new))
-			continue;
-
-		old = atomic64_cmpxchg_relaxed(&inode->i_sequence, 0, new);
-		if (old)
-			return old;
-		return new;
 	}
 }
 
@@ -497,15 +458,9 @@ static u64 get_inode_sequence_number(struct inode *inode)
  *
  * The key words are stored in *key on success.
  *
- For shared mappings (when @fshared), the key is:
- *   ( inode->i_sequence, page->index, offset_within_page )
- * [ also see get_inode_sequence_number() ]
- *
- * For private mappings (or when !@fshared), the key is:
- *   ( current->mm, address, 0 )
- *
- * This allows (cross process, where applicable) identification of the futex
- * without keeping the page pinned for the duration of the FUTEX_WAIT.
+ * For shared mappings, it's (page->index, file_inode(vma->vm_file),
+ * offset_within_page).  For private mappings, it's (uaddr, current->mm).
+ * We can usually work out the index without swapping in the page.
  *
  * lock_page() might sleep, the caller should not hold a spinlock.
  */
@@ -514,14 +469,8 @@ get_futex_key(u32 __user *uaddr, int fshared, union futex_key *key, int rw)
 {
 	unsigned long address = (unsigned long)uaddr;
 	struct mm_struct *mm = current->mm;
-	struct page *page;
-	struct address_space *mapping;
+	struct page *page, *page_head;
 	int err, ro = 0;
-
-#ifdef CONFIG_PAX_SEGMEXEC
-	if ((mm->pax_flags & MF_PAX_SEGMEXEC) && address >= SEGMEXEC_TASK_SIZE)
-		return -EFAULT;
-#endif
 
 	/*
 	 * The futex address must be "naturally" aligned.
@@ -547,7 +496,7 @@ get_futex_key(u32 __user *uaddr, int fshared, union futex_key *key, int rw)
 	if (!fshared) {
 		key->private.mm = mm;
 		key->private.address = address;
-		get_futex_key_refs(key);  /* implies smp_mb(); (B) */
+		get_futex_key_refs(key);  /* implies MB (B) */
 		return 0;
 	}
 
@@ -570,22 +519,46 @@ again:
 	else
 		err = 0;
 
-	/*
-	 * The treatment of mapping from this point on is critical. The page
-	 * lock protects many things but in this context the page lock
-	 * stabilizes mapping, prevents inode freeing in the shared
-	 * file-backed region case and guards against movement to swap cache.
-	 *
-	 * Strictly speaking the page lock is not needed in all cases being
-	 * considered here and page lock forces unnecessarily serialization
-	 * From this point on, mapping will be re-verified if necessary and
-	 * page lock will be acquired only if it is unavoidable
-	 */
-	page = compound_head(page);
-	mapping = READ_ONCE(page->mapping);
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	page_head = page;
+	if (unlikely(PageTail(page))) {
+		put_page(page);
+		/* serialize against __split_huge_page_splitting() */
+		local_irq_disable();
+		if (likely(__get_user_pages_fast(address, 1, !ro, &page) == 1)) {
+			page_head = compound_head(page);
+			/*
+			 * page_head is valid pointer but we must pin
+			 * it before taking the PG_lock and/or
+			 * PG_compound_lock. The moment we re-enable
+			 * irqs __split_huge_page_splitting() can
+			 * return and the head page can be freed from
+			 * under us. We can't take the PG_lock and/or
+			 * PG_compound_lock on a page that could be
+			 * freed from under us.
+			 */
+			if (page != page_head) {
+				get_page(page_head);
+				put_page(page);
+			}
+			local_irq_enable();
+		} else {
+			local_irq_enable();
+			goto again;
+		}
+	}
+#else
+	page_head = compound_head(page);
+	if (page != page_head) {
+		get_page(page_head);
+		put_page(page);
+	}
+#endif
+
+	lock_page(page_head);
 
 	/*
-	 * If page->mapping is NULL, then it cannot be a PageAnon
+	 * If page_head->mapping is NULL, then it cannot be a PageAnon
 	 * page; but it might be the ZERO_PAGE or in the gate area or
 	 * in a special mapping (all cases which we are happy to fail);
 	 * or it may have been a good file page when get_user_pages_fast
@@ -597,38 +570,25 @@ again:
 	 *
 	 * The case we do have to guard against is when memory pressure made
 	 * shmem_writepage move it from filecache to swapcache beneath us:
-	 * an unlikely race, but we do need to retry for page->mapping.
+	 * an unlikely race, but we do need to retry for page_head->mapping.
 	 */
-	if (unlikely(!mapping)) {
-		int shmem_swizzled;
-
-		/*
-		 * Page lock is required to identify which special case above
-		 * applies. If this is really a shmem page then the page lock
-		 * will prevent unexpected transitions.
-		 */
-		lock_page(page);
-		shmem_swizzled = PageSwapCache(page) || page->mapping;
-		unlock_page(page);
-		put_page(page);
-
+	if (!page_head->mapping) {
+		int shmem_swizzled = PageSwapCache(page_head);
+		unlock_page(page_head);
+		put_page(page_head);
 		if (shmem_swizzled)
 			goto again;
-
 		return -EFAULT;
 	}
 
 	/*
 	 * Private mappings are handled in a simple way.
 	 *
-	 * If the futex key is stored on an anonymous page, then the associated
-	 * object is the mm which is implicitly pinned by the calling process.
-	 *
 	 * NOTE: When userspace waits on a MAP_SHARED mapping, even if
 	 * it's a read-only handle, it's expected that futexes attach to
 	 * the object not the particular process.
 	 */
-	if (PageAnon(page)) {
+	if (PageAnon(page_head)) {
 		/*
 		 * A RO anonymous page will never change and thus doesn't make
 		 * sense for futex operations.
@@ -641,47 +601,17 @@ again:
 		key->both.offset |= FUT_OFF_MMSHARED; /* ref taken on mm */
 		key->private.mm = mm;
 		key->private.address = address;
-
 	} else {
-		struct inode *inode;
-
-		/*
-		 * The associated futex object in this case is the inode and
-		 * the page->mapping must be traversed. Ordinarily this should
-		 * be stabilised under page lock but it's not strictly
-		 * necessary in this case as we just want to pin the inode, not
-		 * update the radix tree or anything like that.
-		 *
-		 * The RCU read lock is taken as the inode is finally freed
-		 * under RCU. If the mapping still matches expectations then the
-		 * mapping->host can be safely accessed as being a valid inode.
-		 */
-		rcu_read_lock();
-
-		if (READ_ONCE(page->mapping) != mapping) {
-			rcu_read_unlock();
-			put_page(page);
-
-			goto again;
-		}
-
-		inode = READ_ONCE(mapping->host);
-		if (!inode) {
-			rcu_read_unlock();
-			put_page(page);
-
-			goto again;
-		}
-
 		key->both.offset |= FUT_OFF_INODE; /* inode-based key */
-		key->shared.i_seq = get_inode_sequence_number(inode);
+		key->shared.inode = page_head->mapping->host;
 		key->shared.pgoff = basepage_index(page);
-		rcu_read_unlock();
 	}
-    get_futex_key_refs(key); /* implies smp_mb(); (B) */
-	
+
+	get_futex_key_refs(key); /* implies MB (B) */
+
 out:
-	put_page(page);
+	unlock_page(page_head);
+	put_page(page_head);
 	return err;
 }
 
@@ -1691,9 +1621,6 @@ static int futex_requeue(u32 __user *uaddr1, unsigned int flags,
 	struct futex_q *this, *next;
 	WAKE_Q(wake_q);
 
-	if (nr_wake < 0 || nr_requeue < 0)
-		return -EINVAL;
-
 	if (requeue_pi) {
 		/*
 		 * Requeue PI only works on two distinct uaddrs. This
@@ -1949,7 +1876,7 @@ static inline struct futex_hash_bucket *queue_lock(struct futex_q *q)
 
 	q->lock_ptr = &hb->lock;
 
-	spin_lock(&hb->lock); /* implies smp_mb(); (A) */
+	spin_lock(&hb->lock); /* implies MB (A) */
 	return hb;
 }
 
@@ -3232,7 +3159,6 @@ static void __init futex_detect_cmpxchg(void)
 {
 #ifndef CONFIG_HAVE_FUTEX_CMPXCHG
 	u32 curval;
-	mm_segment_t oldfs;
 
 	/*
 	 * This will fail and we want it. Some arch implementations do
@@ -3244,11 +3170,8 @@ static void __init futex_detect_cmpxchg(void)
 	 * implementation, the non-functional ones will return
 	 * -ENOSYS.
 	 */
-	oldfs = get_fs();
-	set_fs(USER_DS);
 	if (cmpxchg_futex_value_locked(&curval, NULL, 0, 0) == -EFAULT)
 		futex_cmpxchg_enabled = 1;
-	set_fs(oldfs);
 #endif
 }
 

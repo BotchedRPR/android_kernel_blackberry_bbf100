@@ -69,9 +69,6 @@ cmd_image = $(obj)/tools/build $(obj)/setup.bin $(obj)/vmlinux.bin \
 			       $(obj)/zoffset.h $@
 
 $(obj)/bzImage: $(obj)/setup.bin $(obj)/vmlinux.bin $(obj)/tools/build FORCE
-ifdef CONFIG_DOES_NOT_RUN
-    $(error Error: CONFIG_DO_NOT_RUN set.  Will not create bootable image)
-endif
 	$(call if_changed,image)
 	@echo 'Kernel: $@ is ready' ' (#'`cat .version`')'
 

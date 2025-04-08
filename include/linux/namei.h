@@ -96,11 +96,7 @@ extern int follow_up(struct path *);
 extern struct dentry *lock_rename(struct dentry *, struct dentry *);
 extern void unlock_rename(struct dentry *, struct dentry *);
 
-#if defined(CONFIG_BBSECURE_O_BENEATH) || defined(CONFIG_BBSECURE_O_NOSYMLINK)
-extern int nd_jump_link(struct path *path);
-#else
 extern void nd_jump_link(struct path *path);
-#endif
 
 static inline void nd_terminate_link(void *name, size_t len, size_t maxlen)
 {

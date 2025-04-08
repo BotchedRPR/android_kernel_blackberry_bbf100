@@ -1048,10 +1048,10 @@ static struct attribute_group *
 nct6775_create_attr_group(struct device *dev, struct sensor_template_group *tg,
 			  int repeat)
 {
-	attribute_group_no_const *group;
+	struct attribute_group *group;
 	struct sensor_device_attr_u *su;
-	sensor_device_attribute_no_const *a;
-	sensor_device_attribute_2_no_const *a2;
+	struct sensor_device_attribute *a;
+	struct sensor_device_attribute_2 *a2;
 	struct attribute **attrs;
 	struct sensor_device_template **t;
 	int i, count;

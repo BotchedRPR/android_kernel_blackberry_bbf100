@@ -319,9 +319,8 @@ static int ipmmu_domain_init_context(struct ipmmu_vmsa_domain *domain)
 	 */
 	domain->cfg.iommu_dev = domain->mmu->dev;
 
-        domain->iop = alloc_io_pgtable_ops(ARM_32_LPAE_S1, &domain->cfg,
-                                          domain);
-
+	domain->iop = alloc_io_pgtable_ops(ARM_32_LPAE_S1, &domain->cfg,
+					   domain);
 	if (!domain->iop)
 		return -EINVAL;
 

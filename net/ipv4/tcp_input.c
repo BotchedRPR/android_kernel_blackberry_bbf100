@@ -267,13 +267,11 @@ static void tcp_ecn_rcv_synack(struct tcp_sock *tp, const struct tcphdr *th)
 		tp->ecn_flags &= ~TCP_ECN_OK;
 }
 
-#ifndef CONFIG_GRKERNSEC_NO_SIMULT_CONNECT
 static void tcp_ecn_rcv_syn(struct tcp_sock *tp, const struct tcphdr *th)
 {
 	if ((tp->ecn_flags & TCP_ECN_OK) && (!th->ece || !th->cwr))
 		tp->ecn_flags &= ~TCP_ECN_OK;
 }
-#endif
 
 static bool tcp_ecn_rcv_ecn_echo(const struct tcp_sock *tp, const struct tcphdr *th)
 {
@@ -790,7 +788,7 @@ static void tcp_update_pacing_rate(struct sock *sk)
 	 * without any lock. We want to make sure compiler wont store
 	 * intermediate values in this location.
 	 */
-	ACCESS_ONCE_RW(sk->sk_pacing_rate) = min_t(u64, rate,
+	ACCESS_ONCE(sk->sk_pacing_rate) = min_t(u64, rate,
 						sk->sk_max_pacing_rate);
 }
 
@@ -4687,7 +4685,7 @@ static struct sk_buff *tcp_collapse_one(struct sock *sk, struct sk_buff *skb,
  * simplifies code)
  */
 static void
-__intentional_overflow(5,6) tcp_collapse(struct sock *sk, struct sk_buff_head *list,
+tcp_collapse(struct sock *sk, struct sk_buff_head *list,
 	     struct sk_buff *head, struct sk_buff *tail,
 	     u32 start, u32 end)
 {
@@ -4782,7 +4780,6 @@ restart:
 static void tcp_collapse_ofo_queue(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
-	u32 range_truesize, sum_tiny = 0;
 	struct sk_buff *skb = skb_peek(&tp->out_of_order_queue);
 	struct sk_buff *head;
 	u32 start, end;
@@ -4792,7 +4789,6 @@ static void tcp_collapse_ofo_queue(struct sock *sk)
 
 	start = TCP_SKB_CB(skb)->seq;
 	end = TCP_SKB_CB(skb)->end_seq;
-	range_truesize = skb->truesize;
 	head = skb;
 
 	for (;;) {
@@ -4807,24 +4803,14 @@ static void tcp_collapse_ofo_queue(struct sock *sk)
 		if (!skb ||
 		    after(TCP_SKB_CB(skb)->seq, end) ||
 		    before(TCP_SKB_CB(skb)->end_seq, start)) {
-			/* Do not attempt collapsing tiny skbs */
-			if (range_truesize != head->truesize ||
-			    end - start >= SKB_WITH_OVERHEAD(SK_MEM_QUANTUM)) {
-				tcp_collapse(sk, &tp->out_of_order_queue,
-					     head, skb, start, end);
-			} else {
-				sum_tiny += range_truesize;
-				if (sum_tiny > sk->sk_rcvbuf >> 3)
-					return;
-			}
-
+			tcp_collapse(sk, &tp->out_of_order_queue,
+				     head, skb, start, end);
 			head = skb;
 			if (!skb)
 				break;
 			/* Start new segment */
 			start = TCP_SKB_CB(skb)->seq;
 			end = TCP_SKB_CB(skb)->end_seq;
-			range_truesize = skb->truesize;
 		} else {
 			if (before(TCP_SKB_CB(skb)->seq, start))
 				start = TCP_SKB_CB(skb)->seq;
@@ -4879,9 +4865,6 @@ static int tcp_prune_queue(struct sock *sk)
 		tcp_clamp_window(sk);
 	else if (tcp_under_memory_pressure(sk))
 		tp->rcv_ssthresh = min(tp->rcv_ssthresh, 4U * tp->advmss);
-
-	if (atomic_read(&sk->sk_rmem_alloc) <= sk->sk_rcvbuf)
-		return 0;
 
 	tcp_collapse_ofo_queue(sk);
 	if (!skb_queue_empty(&sk->sk_receive_queue))
@@ -5698,7 +5681,6 @@ discard:
 	    tcp_paws_reject(&tp->rx_opt, 0))
 		goto discard_and_undo;
 
-#ifndef CONFIG_GRKERNSEC_NO_SIMULT_CONNECT
 	if (th->syn) {
 		/* We see SYN without ACK. It is attempt of
 		 * simultaneous connect with crossed SYNs.
@@ -5750,7 +5732,6 @@ discard:
 		goto discard;
 #endif
 	}
-#endif
 	/* "fifth, if neither of the SYN or RST bits is set then
 	 * drop the segment and return."
 	 */
@@ -5796,7 +5777,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			goto discard;
 
 		if (th->syn) {
-			if (th->fin || th->urg || th->psh)
+			if (th->fin)
 				goto discard;
 			if (icsk->icsk_af_ops->conn_request(sk, skb) < 0)
 				return 1;
@@ -6128,7 +6109,7 @@ struct request_sock *inet_reqsk_alloc(const struct request_sock_ops *ops,
 
 		kmemcheck_annotate_bitfield(ireq, flags);
 		ireq->opt = NULL;
-		atomic64_set_unchecked(&ireq->ir_cookie, 0);
+		atomic64_set(&ireq->ir_cookie, 0);
 		ireq->ireq_state = TCP_NEW_SYN_RECV;
 		write_pnet(&ireq->ireq_net, sock_net(sk_listener));
 		ireq->ireq_family = sk_listener->sk_family;

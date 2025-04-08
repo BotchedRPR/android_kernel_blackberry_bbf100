@@ -1422,7 +1422,7 @@ ip_set_dump(struct sock *ctnl, struct sk_buff *skb,
 		return -IPSET_ERR_PROTOCOL;
 
 	{
-		static struct netlink_dump_control c = {
+		struct netlink_dump_control c = {
 			.dump = ip_set_dump_start,
 			.done = ip_set_dump_done,
 		};
@@ -1997,7 +1997,7 @@ done:
 	return ret;
 }
 
-static struct nf_sockopt_ops so_set = {
+static struct nf_sockopt_ops so_set __read_mostly = {
 	.pf		= PF_INET,
 	.get_optmin	= SO_IP_SET,
 	.get_optmax	= SO_IP_SET + 1,

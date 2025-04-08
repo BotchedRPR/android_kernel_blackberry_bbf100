@@ -234,25 +234,21 @@ EXPORT_SYMBOL(utf16s_to_utf8s);
 
 int __register_nls(struct nls_table *nls, struct module *owner)
 {
-	struct nls_table *tmp = tables;
+	struct nls_table ** tmp = &tables;
 
 	if (nls->next)
 		return -EBUSY;
 
-	pax_open_kernel();
-	*(void **)&nls->owner = owner;
-	pax_close_kernel();
+	nls->owner = owner;
 	spin_lock(&nls_lock);
-	while (tmp) {
-		if (nls == tmp) {
+	while (*tmp) {
+		if (nls == *tmp) {
 			spin_unlock(&nls_lock);
 			return -EBUSY;
 		}
-		tmp = tmp->next;
+		tmp = &(*tmp)->next;
 	}
-	pax_open_kernel();
-	*(struct nls_table **)&nls->next = tables;
-	pax_close_kernel();
+	nls->next = tables;
 	tables = nls;
 	spin_unlock(&nls_lock);
 	return 0;	
@@ -261,14 +257,12 @@ EXPORT_SYMBOL(__register_nls);
 
 int unregister_nls(struct nls_table * nls)
 {
-	struct nls_table * const * tmp = &tables;
+	struct nls_table ** tmp = &tables;
 
 	spin_lock(&nls_lock);
 	while (*tmp) {
 		if (nls == *tmp) {
-			pax_open_kernel();
-			*(struct nls_table **)tmp = nls->next;
-			pax_close_kernel();
+			*tmp = nls->next;
 			spin_unlock(&nls_lock);
 			return 0;
 		}
@@ -278,7 +272,7 @@ int unregister_nls(struct nls_table * nls)
 	return -EINVAL;
 }
 
-static struct nls_table *find_nls(const char *charset)
+static struct nls_table *find_nls(char *charset)
 {
 	struct nls_table *nls;
 	spin_lock(&nls_lock);
@@ -294,7 +288,7 @@ static struct nls_table *find_nls(const char *charset)
 	return nls;
 }
 
-struct nls_table *load_nls(const char *charset)
+struct nls_table *load_nls(char *charset)
 {
 	return try_then_request_module(find_nls(charset), "nls_%s", charset);
 }

@@ -184,7 +184,7 @@ static void lowpan_dellink(struct net_device *ldev, struct list_head *head)
 	dev_put(wdev);
 }
 
-static struct rtnl_link_ops lowpan_link_ops = {
+static struct rtnl_link_ops lowpan_link_ops __read_mostly = {
 	.kind		= "lowpan",
 	.priv_size	= LOWPAN_PRIV_SIZE(sizeof(struct lowpan_dev_info)),
 	.setup		= lowpan_setup,

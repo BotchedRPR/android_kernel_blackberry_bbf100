@@ -851,19 +851,16 @@ static int input_default_setkeycode(struct input_dev *dev,
 		}
 	}
 
-	/* MODIFIED-BEGIN by hongwei.tian, 2020-06-09,BUG-9498573*/
-	if (*old_keycode <= KEY_MAX) {
-		__clear_bit(*old_keycode, dev->keybit);
-		for (i = 0; i < dev->keycodemax; i++) {
-			if (input_fetch_keycode(dev, i) == *old_keycode) {
-				__set_bit(*old_keycode, dev->keybit);
-				/* Setting the bit twice is useless, so break */
-				break;
-			}
+	__clear_bit(*old_keycode, dev->keybit);
+	__set_bit(ke->keycode, dev->keybit);
+
+	for (i = 0; i < dev->keycodemax; i++) {
+		if (input_fetch_keycode(dev, i) == *old_keycode) {
+			__set_bit(*old_keycode, dev->keybit);
+			break; /* Setting the bit twice is useless, so break */
 		}
 	}
-        __set_bit(ke->keycode, dev->keybit);
-        /* MODIFIED-END by hongwei.tian,BUG-9498573*/
+
 	return 0;
 }
 
@@ -919,15 +916,9 @@ int input_set_keycode(struct input_dev *dev,
 	 * Simulate keyup event if keycode is not present
 	 * in the keymap anymore
 	 */
-	/* MODIFIED-BEGIN by hongwei.tian, 2020-06-09,BUG-9498573*/
-	if (old_keycode > KEY_MAX) {
-		dev_warn(dev->dev.parent ?: &dev->dev,
-			 "%s: got too big old keycode %#x\n",
-			 __func__, old_keycode);
-	} else if (test_bit(EV_KEY, dev->evbit) &&
-		   !is_event_supported(old_keycode, dev->keybit, KEY_MAX) &&
-		   __test_and_clear_bit(old_keycode, dev->key)) {
-		   /* MODIFIED-END by hongwei.tian,BUG-9498573*/
+	if (test_bit(EV_KEY, dev->evbit) &&
+	    !is_event_supported(old_keycode, dev->keybit, KEY_MAX) &&
+	    __test_and_clear_bit(old_keycode, dev->key)) {
 		struct input_value vals[] =  {
 			{ EV_KEY, old_keycode, 0 },
 			input_value_sync
@@ -1796,7 +1787,7 @@ EXPORT_SYMBOL_GPL(input_class);
  */
 struct input_dev *input_allocate_device(void)
 {
-	static atomic_unchecked_t input_no = ATOMIC_INIT(-1);
+	static atomic_t input_no = ATOMIC_INIT(-1);
 	struct input_dev *dev;
 
 	dev = kzalloc(sizeof(struct input_dev), GFP_KERNEL);
@@ -1811,7 +1802,7 @@ struct input_dev *input_allocate_device(void)
 		INIT_LIST_HEAD(&dev->node);
 
 		dev_set_name(&dev->dev, "input%lu",
-			     (unsigned long)atomic_inc_return_unchecked(&input_no));
+			     (unsigned long)atomic_inc_return(&input_no));
 
 		__module_get(THIS_MODULE);
 	}

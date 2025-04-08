@@ -1732,9 +1732,6 @@ static void _regulator_put(struct regulator *regulator)
 
 	rdev = regulator->rdev;
 
-	if (regulator->enabled == 1 && rdev->use_count >= 1)
-		rdev->use_count--;
-
 	debugfs_remove_recursive(regulator->debugfs);
 
 	/* remove any sysfs entries */
@@ -2284,11 +2281,6 @@ int regulator_disable(struct regulator *regulator)
 
 	if (regulator->always_on)
 		return 0;
-
-	/* MODIFIED-BEGIN by hongwei.tian, 2017-09-12,BUG-5323982*/
-	if (WARN_ON(regulator->enabled == 0))
-		return -EINVAL;
-		/* MODIFIED-END by hongwei.tian,BUG-5323982*/
 
 	mutex_lock(&rdev->mutex);
 	ret = _regulator_disable(rdev);
@@ -4278,7 +4270,7 @@ regulator_register(const struct regulator_desc *regulator_desc,
 	const struct regulation_constraints *constraints = NULL;
 	const struct regulator_init_data *init_data;
 	struct regulator_config *config = NULL;
-	static atomic_unchecked_t regulator_no = ATOMIC_INIT(-1);
+	static atomic_t regulator_no = ATOMIC_INIT(-1);
 	struct regulator_dev *rdev;
 	struct device *dev;
 	int ret, i;
@@ -4361,7 +4353,7 @@ regulator_register(const struct regulator_desc *regulator_desc,
 	rdev->dev.class = &regulator_class;
 	rdev->dev.parent = dev;
 	dev_set_name(&rdev->dev, "regulator.%lu",
-		    (unsigned long) atomic_inc_return_unchecked(&regulator_no));
+		    (unsigned long) atomic_inc_return(&regulator_no));
 	ret = device_register(&rdev->dev);
 	if (ret != 0) {
 		put_device(&rdev->dev);

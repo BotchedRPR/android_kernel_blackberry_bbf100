@@ -105,8 +105,6 @@
 #include <linux/kmod.h>
 #include <linux/nsproxy.h>
 
-#include <linux/grsecurity.h>
-
 #undef TTY_DEBUG_HANGUP
 #ifdef TTY_DEBUG_HANGUP
 # define tty_debug_hangup(tty, f, args...)	tty_debug(tty, f, ##args)
@@ -2282,8 +2280,6 @@ static int tiocsti(struct tty_struct *tty, char __user *p)
 	char ch, mbz = 0;
 	struct tty_ldisc *ld;
 
-	if (gr_handle_tiocsti(tty))
-		return -EPERM;
 	if ((current->signal->tty != tty) && !capable(CAP_SYS_ADMIN))
 		return -EPERM;
 	if (get_user(ch, p))
@@ -2608,12 +2604,10 @@ static int tiocspgrp(struct tty_struct *tty, struct tty_struct *real_tty, pid_t 
 	if (session_of_pgrp(pgrp) != task_session(current))
 		goto out_unlock;
 	retval = 0;
-	/* MODIFIED-BEGIN by hongwei.tian, 2021-04-23,BUG-11021626*/
-	spin_lock_irq(&real_tty->ctrl_lock);
+	spin_lock_irq(&tty->ctrl_lock);
 	put_pid(real_tty->pgrp);
 	real_tty->pgrp = get_pid(pgrp);
-	spin_unlock_irq(&real_tty->ctrl_lock);
-	/* MODIFIED-END by hongwei.tian,BUG-11021626*/
+	spin_unlock_irq(&tty->ctrl_lock);
 out_unlock:
 	rcu_read_unlock();
 	return retval;
@@ -3025,7 +3019,7 @@ static int this_tty(const void *t, struct file *file, unsigned fd)
 		return 0;
 	return file_tty(file) != t ? 0 : fd + 1;
 }
-
+	
 /*
  * This implements the "Secure Attention Key" ---  the idea is to
  * prevent trojan horses by killing all processes associated with this
@@ -3569,7 +3563,7 @@ EXPORT_SYMBOL(tty_devnum);
 
 void tty_default_fops(struct file_operations *fops)
 {
-	memcpy((void *)fops, &tty_fops, sizeof(tty_fops));
+	*fops = tty_fops;
 }
 
 /*

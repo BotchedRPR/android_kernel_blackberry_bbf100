@@ -10,7 +10,6 @@ config PAGE_EXTENSION
 config DEBUG_PAGEALLOC
 	bool "Debug page memory allocations"
 	depends on DEBUG_KERNEL
-	depends on !PAX_MEMORY_SANITIZE
 	depends on !HIBERNATION || ARCH_SUPPORTS_DEBUG_PAGEALLOC && !PPC && !SPARC
 	depends on !KMEMCHECK
 	select PAGE_EXTENSION
@@ -100,17 +99,3 @@ config PAGE_POISONING_ZERO
 	   Enabling page poisoning with this option will disable hibernation
 
 	   If unsure, say N
-
-config PROTECTED_VARS_CONST
-	bool "Define protected variables as const"
-	depends on DEBUG_KERNEL
-	depends on PROTECTED_VARS
-	select DOES_NOT_RUN
-	---help---
-	 This declares all proteced variables as const to catch assignments at
-	 the compile phase.  Note that because the compiler may optimize const
-	 variables differently by assuming they never change, this setting will
-	 also enable the DOES_NOT_RUN kernel configuration setting, preventing
-	 the creation of bootable kernel images.
-
-	 If unsure, say N

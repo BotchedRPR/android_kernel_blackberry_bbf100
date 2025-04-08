@@ -628,11 +628,12 @@ static struct ctl_table ip6_frags_ctl_table[] = {
 
 static int __net_init ip6_frags_ns_sysctl_register(struct net *net)
 {
-	ctl_table_no_const *table = NULL;
+	struct ctl_table *table;
 	struct ctl_table_header *hdr;
 
+	table = ip6_frags_ns_ctl_table;
 	if (!net_eq(net, &init_net)) {
-		table = kmemdup(ip6_frags_ns_ctl_table, sizeof(ip6_frags_ns_ctl_table), GFP_KERNEL);
+		table = kmemdup(table, sizeof(ip6_frags_ns_ctl_table), GFP_KERNEL);
 		if (!table)
 			goto err_alloc;
 
@@ -646,10 +647,9 @@ static int __net_init ip6_frags_ns_sysctl_register(struct net *net)
 		/* Don't export sysctls to unprivileged users */
 		if (net->user_ns != &init_user_ns)
 			table[0].procname = NULL;
-		hdr = register_net_sysctl(net, "net/ipv6", table);
-	} else
-		hdr = register_net_sysctl(net, "net/ipv6", ip6_frags_ns_ctl_table);
+	}
 
+	hdr = register_net_sysctl(net, "net/ipv6", table);
 	if (!hdr)
 		goto err_reg;
 
@@ -657,7 +657,8 @@ static int __net_init ip6_frags_ns_sysctl_register(struct net *net)
 	return 0;
 
 err_reg:
-	kfree(table);
+	if (!net_eq(net, &init_net))
+		kfree(table);
 err_alloc:
 	return -ENOMEM;
 }

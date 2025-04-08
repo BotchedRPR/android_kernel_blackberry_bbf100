@@ -470,24 +470,21 @@ static char *bdevt_str(dev_t devt, char *buf)
 
 /*
  * Register device numbers dev..(dev+range-1)
- * Noop if @range is zero.
+ * range must be nonzero
  * The hash chain is sorted on range, so that subranges can override.
  */
 void blk_register_region(dev_t devt, unsigned long range, struct module *module,
 			 struct kobject *(*probe)(dev_t, int *, void *),
 			 int (*lock)(dev_t, void *), void *data)
 {
-	if (range)
-		kobj_map(bdev_map, devt, range, module, probe, lock, data);
+	kobj_map(bdev_map, devt, range, module, probe, lock, data);
 }
 
 EXPORT_SYMBOL(blk_register_region);
 
-/* undo blk_register_region(), noop if @range is zero */
 void blk_unregister_region(dev_t devt, unsigned long range)
 {
-	if (range)
-		kobj_unmap(bdev_map, devt, range);
+	kobj_unmap(bdev_map, devt, range);
 }
 
 EXPORT_SYMBOL(blk_unregister_region);

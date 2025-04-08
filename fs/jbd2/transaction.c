@@ -91,7 +91,7 @@ jbd2_get_transaction(journal_t *journal, transaction_t *transaction)
 	atomic_set(&transaction->t_updates, 0);
 	atomic_set(&transaction->t_outstanding_credits,
 		   atomic_read(&journal->j_reserved_credits));
-	atomic_set_unchecked(&transaction->t_handle_count, 0);
+	atomic_set(&transaction->t_handle_count, 0);
 	INIT_LIST_HEAD(&transaction->t_inode_list);
 	INIT_LIST_HEAD(&transaction->t_private_list);
 
@@ -374,7 +374,7 @@ repeat:
 	handle->h_requested_credits = blocks;
 	handle->h_start_jiffies = jiffies;
 	atomic_inc(&transaction->t_updates);
-	atomic_inc_unchecked(&transaction->t_handle_count);
+	atomic_inc(&transaction->t_handle_count);
 	jbd_debug(4, "Handle %p given %d credits (total %d, free %lu)\n",
 		  handle, blocks,
 		  atomic_read(&transaction->t_outstanding_credits),
@@ -1362,13 +1362,6 @@ int jbd2_journal_dirty_metadata(handle_t *handle, struct buffer_head *bh)
 		if (jh->b_transaction == transaction &&
 		    jh->b_jlist != BJ_Metadata) {
 			jbd_lock_bh_state(bh);
-			if (jh->b_transaction == transaction &&
-			    jh->b_jlist != BJ_Metadata)
-				pr_err("JBD2: assertion failure: h_type=%u "
-				       "h_line_no=%u block_no=%llu jlist=%u\n",
-				       handle->h_type, handle->h_line_no,
-				       (unsigned long long) bh->b_blocknr,
-				       jh->b_jlist);
 			J_ASSERT_JH(jh, jh->b_transaction != transaction ||
 					jh->b_jlist == BJ_Metadata);
 			jbd_unlock_bh_state(bh);
@@ -1388,11 +1381,11 @@ int jbd2_journal_dirty_metadata(handle_t *handle, struct buffer_head *bh)
 		 * of the transaction. This needs to be done
 		 * once a transaction -bzzz
 		 */
+		jh->b_modified = 1;
 		if (handle->h_buffer_credits <= 0) {
 			ret = -ENOSPC;
 			goto out_unlock_bh;
 		}
-		jh->b_modified = 1;
 		handle->h_buffer_credits--;
 	}
 

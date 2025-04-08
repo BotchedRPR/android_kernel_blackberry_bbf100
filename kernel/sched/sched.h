@@ -2062,7 +2062,7 @@ struct sched_class {
 	void (*fixup_hmp_sched_stats)(struct rq *rq, struct task_struct *p,
 				      u32 new_task_load, u32 new_pred_demand);
 #endif
-} __do_const;
+};
 
 static inline void put_prev_task(struct rq *rq, struct task_struct *prev)
 {

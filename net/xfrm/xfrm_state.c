@@ -166,14 +166,12 @@ int xfrm_register_type(const struct xfrm_type *type, unsigned short family)
 
 	if (unlikely(afinfo == NULL))
 		return -EAFNOSUPPORT;
-	typemap = (const struct xfrm_type **)afinfo->type_map;
+	typemap = afinfo->type_map;
 	spin_lock_bh(&xfrm_type_lock);
 
-	if (likely(typemap[type->proto] == NULL)) {
-		pax_open_kernel();
+	if (likely(typemap[type->proto] == NULL))
 		typemap[type->proto] = type;
-		pax_close_kernel();
-	} else
+	else
 		err = -EEXIST;
 	spin_unlock_bh(&xfrm_type_lock);
 	xfrm_state_put_afinfo(afinfo);
@@ -189,16 +187,13 @@ int xfrm_unregister_type(const struct xfrm_type *type, unsigned short family)
 
 	if (unlikely(afinfo == NULL))
 		return -EAFNOSUPPORT;
-	typemap = (const struct xfrm_type **)afinfo->type_map;
+	typemap = afinfo->type_map;
 	spin_lock_bh(&xfrm_type_lock);
 
 	if (unlikely(typemap[type->proto] != type))
 		err = -ENOENT;
-	else {
-		pax_open_kernel();
+	else
 		typemap[type->proto] = NULL;
-		pax_close_kernel();
-	}
 	spin_unlock_bh(&xfrm_type_lock);
 	xfrm_state_put_afinfo(afinfo);
 	return err;
@@ -208,6 +203,7 @@ EXPORT_SYMBOL(xfrm_unregister_type);
 static const struct xfrm_type *xfrm_get_type(u8 proto, unsigned short family)
 {
 	struct xfrm_state_afinfo *afinfo;
+	const struct xfrm_type **typemap;
 	const struct xfrm_type *type;
 	int modload_attempted = 0;
 
@@ -215,8 +211,9 @@ retry:
 	afinfo = xfrm_state_get_afinfo(family);
 	if (unlikely(afinfo == NULL))
 		return NULL;
+	typemap = afinfo->type_map;
 
-	type = afinfo->type_map[proto];
+	type = typemap[proto];
 	if (unlikely(type && !try_module_get(type->owner)))
 		type = NULL;
 	if (!type && !modload_attempted) {
@@ -250,7 +247,7 @@ int xfrm_register_mode(struct xfrm_mode *mode, int family)
 		return -EAFNOSUPPORT;
 
 	err = -EEXIST;
-	modemap = (struct xfrm_mode **)afinfo->mode_map;
+	modemap = afinfo->mode_map;
 	spin_lock_bh(&xfrm_mode_lock);
 	if (modemap[mode->encap])
 		goto out;
@@ -259,10 +256,8 @@ int xfrm_register_mode(struct xfrm_mode *mode, int family)
 	if (!try_module_get(afinfo->owner))
 		goto out;
 
-	pax_open_kernel();
-	*(const void **)&mode->afinfo = afinfo;
+	mode->afinfo = afinfo;
 	modemap[mode->encap] = mode;
-	pax_close_kernel();
 	err = 0;
 
 out:
@@ -286,12 +281,10 @@ int xfrm_unregister_mode(struct xfrm_mode *mode, int family)
 		return -EAFNOSUPPORT;
 
 	err = -ENOENT;
-	modemap = (struct xfrm_mode **)afinfo->mode_map;
+	modemap = afinfo->mode_map;
 	spin_lock_bh(&xfrm_mode_lock);
 	if (likely(modemap[mode->encap] == mode)) {
-		pax_open_kernel();
 		modemap[mode->encap] = NULL;
-		pax_close_kernel();
 		module_put(mode->afinfo->owner);
 		err = 0;
 	}
@@ -1512,10 +1505,10 @@ EXPORT_SYMBOL(xfrm_find_acq_byseq);
 u32 xfrm_get_acqseq(void)
 {
 	u32 res;
-	static atomic_unchecked_t acqseq;
+	static atomic_t acqseq;
 
 	do {
-		res = atomic_inc_return_unchecked(&acqseq);
+		res = atomic_inc_return(&acqseq);
 	} while (!res);
 
 	return res;
@@ -1890,7 +1883,7 @@ static DEFINE_SPINLOCK(xfrm_km_lock);
 int xfrm_register_km(struct xfrm_mgr *km)
 {
 	spin_lock_bh(&xfrm_km_lock);
-	pax_list_add_tail_rcu((struct list_head *)&km->list, &xfrm_km_list);
+	list_add_tail_rcu(&km->list, &xfrm_km_list);
 	spin_unlock_bh(&xfrm_km_lock);
 	return 0;
 }
@@ -1899,7 +1892,7 @@ EXPORT_SYMBOL(xfrm_register_km);
 int xfrm_unregister_km(struct xfrm_mgr *km)
 {
 	spin_lock_bh(&xfrm_km_lock);
-	pax_list_del_rcu((struct list_head *)&km->list);
+	list_del_rcu(&km->list);
 	spin_unlock_bh(&xfrm_km_lock);
 	synchronize_rcu();
 	return 0;

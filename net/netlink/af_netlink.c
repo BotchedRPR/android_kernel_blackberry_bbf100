@@ -223,10 +223,8 @@ static int __netlink_deliver_tap_skb(struct sk_buff *skb,
 	struct sock *sk = skb->sk;
 	int ret = -ENOMEM;
 
-	if (!net_eq(dev_net(dev), sock_net(sk)) &&
-	    !net_eq(dev_net(dev), &init_net)) {
+	if (!net_eq(dev_net(dev), sock_net(sk)))
 		return 0;
-	}
 
 	dev_hold(dev);
 
@@ -292,7 +290,7 @@ static void netlink_overrun(struct sock *sk)
 			sk->sk_error_report(sk);
 		}
 	}
-	atomic_inc_unchecked(&sk->sk_drops);
+	atomic_inc(&sk->sk_drops);
 }
 
 static void netlink_rcv_wake(struct sock *sk)
@@ -2154,9 +2152,7 @@ errout_skb:
 
 int __netlink_dump_start(struct sock *ssk, struct sk_buff *skb,
 			 const struct nlmsghdr *nlh,
-			 struct netlink_dump_control *control,
-			 void *data,
-			 struct module *module)
+			 struct netlink_dump_control *control)
 {
 	struct netlink_callback *cb;
 	struct sock *sk;
@@ -2179,7 +2175,7 @@ int __netlink_dump_start(struct sock *ssk, struct sk_buff *skb,
 		goto error_unlock;
 	}
 	/* add reference of module which cb->dump belongs to */
-	if (!try_module_get(module)) {
+	if (!try_module_get(control->module)) {
 		ret = -EPROTONOSUPPORT;
 		goto error_unlock;
 	}
@@ -2189,8 +2185,8 @@ int __netlink_dump_start(struct sock *ssk, struct sk_buff *skb,
 	cb->dump = control->dump;
 	cb->done = control->done;
 	cb->nlh = nlh;
-	cb->data = data;
-	cb->module = module;
+	cb->data = control->data;
+	cb->module = control->module;
 	cb->min_dump_alloc = control->min_dump_alloc;
 	cb->skb = skb;
 
@@ -2454,7 +2450,7 @@ static int netlink_seq_show(struct seq_file *seq, void *v)
 			   sk_wmem_alloc_get(s),
 			   nlk->cb_running,
 			   atomic_read(&s->sk_refcnt),
-			   atomic_read_unchecked(&s->sk_drops),
+			   atomic_read(&s->sk_drops),
 			   sock_i_ino(s)
 			);
 

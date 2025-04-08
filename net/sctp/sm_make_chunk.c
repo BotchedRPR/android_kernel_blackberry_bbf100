@@ -1830,8 +1830,7 @@ no_hmac:
 	/* Also, add the destination address. */
 	if (list_empty(&retval->base.bind_addr.address_list)) {
 		sctp_add_bind_addr(&retval->base.bind_addr, &chunk->dest,
-				   sizeof(chunk->dest), SCTP_ADDR_SRC,
-				   GFP_ATOMIC);
+				SCTP_ADDR_SRC, GFP_ATOMIC);
 	}
 
 	retval->next_tsn = retval->c.initial_tsn;

@@ -851,7 +851,7 @@ int kimage_load_segment(struct kimage *image,
 
 struct kimage *kexec_image;
 struct kimage *kexec_crash_image;
-int kexec_load_disabled __read_only;
+int kexec_load_disabled;
 
 void crash_kexec(struct pt_regs *regs)
 {

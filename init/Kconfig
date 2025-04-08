@@ -285,8 +285,7 @@ config FHANDLE
 
 config USELIB
 	bool "uselib syscall"
-	default n
-	depends on !GRKERNSEC
+	default y
 	help
 	  This option enables the uselib syscall, a system call used in the
 	  dynamic linker from libc5 and earlier.  glibc does not use this
@@ -644,7 +643,6 @@ config RCU_FAST_NO_HZ
 config TREE_RCU_TRACE
 	def_bool RCU_TRACE && ( TREE_RCU || PREEMPT_RCU )
 	select DEBUG_FS
-	depends on !GRKERNSEC_KMEM
 	help
 	  This option provides tracing for the TREE_RCU and
 	  PREEMPT_RCU implementations, permitting Makefile to
@@ -1229,7 +1227,6 @@ config SCHED_CORE_CTL
 config CHECKPOINT_RESTORE
 	bool "Checkpoint/restore support" if EXPERT
 	select PROC_CHILDREN
-	depends on !GRKERNSEC
 	default n
 	help
 	  Enables additional kernel features in a sake of checkpoint/restore.
@@ -1812,7 +1809,7 @@ config SLUB_DEBUG
 
 config COMPAT_BRK
 	bool "Disable heap randomization"
-	default n
+	default y
 	help
 	  Randomizing heap placement makes heap exploits harder, but it
 	  also breaks ancient binaries (including anything libc5 based).

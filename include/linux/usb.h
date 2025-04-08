@@ -369,7 +369,7 @@ struct usb_bus {
 					 * with the URB_SHORT_NOT_OK flag set.
 					 */
 	unsigned no_sg_constraint:1;	/* no sg constraint */
-	unsigned short sg_tablesize;	/* 0 or largest number of sg list entries */
+	unsigned sg_tablesize;		/* 0 or largest number of sg list entries */
 
 	int devnum_next;		/* Next open device number in
 					 * round-robin allocation */
@@ -610,7 +610,7 @@ struct usb_device {
 	int maxchild;
 
 	u32 quirks;
-	atomic_unchecked_t urbnum;
+	atomic_t urbnum;
 
 	unsigned long active_duration;
 
@@ -1814,10 +1814,10 @@ void usb_sg_wait(struct usb_sg_request *io);
 
 /* NOTE:  these are not the standard USB_ENDPOINT_XFER_* values!! */
 /* (yet ... they're the values used by usbfs) */
-#define PIPE_ISOCHRONOUS		0U
-#define PIPE_INTERRUPT			1U
-#define PIPE_CONTROL			2U
-#define PIPE_BULK			3U
+#define PIPE_ISOCHRONOUS		0
+#define PIPE_INTERRUPT			1
+#define PIPE_CONTROL			2
+#define PIPE_BULK			3
 
 #define usb_pipein(pipe)	((pipe) & USB_DIR_IN)
 #define usb_pipeout(pipe)	(!usb_pipein(pipe))

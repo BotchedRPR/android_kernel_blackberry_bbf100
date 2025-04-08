@@ -236,8 +236,6 @@ struct clk_ops {
 							unsigned long rate_max);
 };
 
-typedef struct clk_ops __no_const clk_ops_no_const;
-
 /**
  * struct clk_init_data - holds init data that's common to all clocks and is
  * shared between the clock provider and the common clock framework.
