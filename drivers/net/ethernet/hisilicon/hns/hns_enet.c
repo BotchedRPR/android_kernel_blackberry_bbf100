@@ -101,8 +101,8 @@ static void unfill_desc(struct hnae_ring *ring)
 }
 
 netdev_tx_t hns_nic_net_xmit_hw(struct net_device *ndev,
-			struct sk_buff *skb,
-			struct hns_nic_ring_data *ring_data)
+				struct sk_buff *skb,
+				struct hns_nic_ring_data *ring_data)
 {
 	struct hns_nic_priv *priv = netdev_priv(ndev);
 	struct hnae_ring *ring = ring_data->ring;
@@ -172,7 +172,7 @@ netdev_tx_t hns_nic_net_xmit_hw(struct net_device *ndev,
 	dev_queue = netdev_get_tx_queue(ndev, skb->queue_mapping);
 	netdev_tx_sent_queue(dev_queue, skb->len);
 
-	netif_trans_update(ndev);
+	ndev->trans_start = jiffies;
 	ndev->stats.tx_bytes += skb->len;
 	ndev->stats.tx_packets++;
 
