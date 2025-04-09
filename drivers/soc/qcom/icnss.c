@@ -1255,7 +1255,7 @@ static int wlfw_msa_mem_info_send_sync_msg(void)
 	for (i = 0; i < resp.mem_region_info_len; i++) {
 
 		if (resp.mem_region_info[i].size > penv->msa_mem_size ||
-		    resp.mem_region_info[i].region_addr >= max_mapped_addr || // MODIFIED by qianbo.pan, 2019-11-18,BUG-8609285
+		    resp.mem_region_info[i].region_addr > max_mapped_addr ||
 		    resp.mem_region_info[i].region_addr < penv->msa_pa ||
 		    resp.mem_region_info[i].size +
 		    resp.mem_region_info[i].region_addr > max_mapped_addr) {
@@ -3452,7 +3452,6 @@ int icnss_trigger_recovery(struct device *dev)
 	if (test_bit(ICNSS_PD_RESTART, &priv->state)) {
 		icnss_pr_err("PD recovery already in progress: state: 0x%lx\n",
 			     priv->state);
-		ret = -EPERM;
 		goto out;
 	}
 

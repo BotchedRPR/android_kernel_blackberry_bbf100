@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017, 2019 Linux Foundation. All rights reserved. // MODIFIED by hongwei.tian, 2019-08-01,BUG-8201402
+ * Copyright (c) 2013-2017, 2019 Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,7 +26,7 @@
 #define LSM_MAX_NUM_CHANNELS 8
 
 typedef void (*lsm_app_cb)(uint32_t opcode, uint32_t token,
-		       uint32_t *payload, uint16_t client_size, void *priv); // MODIFIED by hongwei.tian, 2019-08-01,BUG-8201402
+		       uint32_t *payload, uint16_t client_size, void *priv);
 
 struct lsm_sound_model {
 	dma_addr_t      phys;

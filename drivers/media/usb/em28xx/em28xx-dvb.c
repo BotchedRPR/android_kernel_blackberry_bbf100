@@ -1806,7 +1806,7 @@ static int em28xx_dvb_fini(struct em28xx *dev)
 		}
 	}
 
-	em28xx_unregister_dvb(dvb); // MODIFIED by Haojun Chen, 2019-02-14,BUG-7445816
+	em28xx_unregister_dvb(dvb);
 
 	/* remove I2C SEC */
 	client = dvb->i2c_client_sec;

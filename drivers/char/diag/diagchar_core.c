@@ -584,10 +584,8 @@ static int diag_remove_client_entry(struct file *file)
 static int diagchar_close(struct inode *inode, struct file *file)
 {
 	int ret;
-	/* MODIFIED-BEGIN by hongwei.tian, 2019-08-01,BUG-8201403*/
 	DIAG_LOG(DIAG_DEBUG_USERSPACE, "diag: %s process exit with pid = %d\n",
 		current->comm, current->tgid);
-		/* MODIFIED-END by hongwei.tian,BUG-8201403*/
 	ret = diag_remove_client_entry(file);
 	return ret;
 }
@@ -3130,10 +3128,8 @@ static ssize_t diagchar_read(struct file *file, char __user *buf, size_t count,
 	int exit_stat = 0;
 	int write_len = 0;
 	struct diag_md_session_t *session_info = NULL;
-	/* MODIFIED-BEGIN by hongwei.tian, 2019-08-01,BUG-8201403*/
 	struct pid *pid_struct = NULL;
 	struct task_struct *task_s = NULL;
-	/* MODIFIED-END by hongwei.tian,BUG-8201403*/
 
 	mutex_lock(&driver->diagchar_mutex);
 	for (i = 0; i < driver->num_clients; i++)
@@ -3341,7 +3337,6 @@ exit:
 		list_for_each_safe(start, temp, &driver->dci_client_list) {
 			entry = list_entry(start, struct diag_dci_client_tbl,
 									track);
-			/* MODIFIED-BEGIN by hongwei.tian, 2019-08-01,BUG-8201403*/
 			pid_struct = find_get_pid(entry->tgid);
 			if (!pid_struct)
 				continue;
@@ -3355,7 +3350,6 @@ exit:
 			if (task_s == entry->client)
 				if (entry->client->tgid != current->tgid)
 					continue;
-					/* MODIFIED-END by hongwei.tian,BUG-8201403*/
 			if (!entry->in_service)
 				continue;
 			if (copy_to_user(buf + ret, &data_type, sizeof(int))) {

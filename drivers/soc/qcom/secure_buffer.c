@@ -221,7 +221,7 @@ populate_dest_info(int *dest_vmids, int nelements, int *dest_perms,
 static unsigned int get_batches_from_sgl(struct mem_prot_info *sg_table_copy,
 					 struct scatterlist *sgl,
 					 struct scatterlist **next_sgl)
- {
+{
 	u64 batch_size = 0;
 	unsigned int i = 0;
 	struct scatterlist *curr_sgl = sgl;
