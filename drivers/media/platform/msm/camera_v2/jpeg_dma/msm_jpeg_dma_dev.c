@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2017, 2019 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -916,7 +916,6 @@ static int msm_jpegdma_streamon(struct file *file,
 		mutex_unlock(&ctx->lock);
 		return -EINVAL;
 	}
-
 	ret = v4l2_m2m_streamon(file, ctx->m2m_ctx, buf_type);
 	if (ret < 0)
 		dev_err(ctx->jdma_device->dev, "Stream on fail\n");

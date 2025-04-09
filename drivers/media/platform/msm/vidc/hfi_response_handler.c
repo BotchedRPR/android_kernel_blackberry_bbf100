@@ -1016,8 +1016,8 @@ static enum vidc_status hfi_parse_init_done_properties(
 		case HFI_PROPERTY_PARAM_INTERLACE_FORMAT_SUPPORTED:
 		{
 			VALIDATE_PROPERTY_STRUCTURE_SIZE(rem_bytes -
-					next_offset,
-					sizeof(struct hfi_interlace_format_supported));
+				next_offset,
+				sizeof(struct hfi_interlace_format_supported));
 			next_offset +=
 				sizeof(struct hfi_interlace_format_supported);
 			num_properties--;
@@ -1026,8 +1026,8 @@ static enum vidc_status hfi_parse_init_done_properties(
 		case HFI_PROPERTY_PARAM_NAL_STREAM_FORMAT_SUPPORTED:
 		{
 			VALIDATE_PROPERTY_STRUCTURE_SIZE(rem_bytes -
-					next_offset,
-					sizeof(struct hfi_nal_stream_format_supported));
+				next_offset,
+				sizeof(struct hfi_nal_stream_format_supported));
 			next_offset +=
 				sizeof(struct hfi_nal_stream_format_supported);
 			num_properties--;
@@ -1070,7 +1070,8 @@ static enum vidc_status hfi_parse_init_done_properties(
 			VALIDATE_PROPERTY_STRUCTURE_SIZE(rem_bytes -
 					next_offset,
 					sizeof(*prop));
-			next_offset += sizeof(struct hfi_buffer_alloc_mode_supported);
+			next_offset +=
+				sizeof(struct hfi_buffer_alloc_mode_supported);
 			if (prop->num_entries >= 32) {
 				dprintk(VIDC_ERR,
 					"%s - num_entries: %d from f/w seems suspect\n",
