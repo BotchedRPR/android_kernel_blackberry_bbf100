@@ -2558,7 +2558,8 @@ static int qseecom_unmap_ion_allocated_memory(struct qseecom_dev_handle *data)
 	if (!IS_ERR_OR_NULL(data->client.ihandle)) {
 		ion_unmap_kernel(qseecom.ion_clnt, data->client.ihandle);
 		ion_free(qseecom.ion_clnt, data->client.ihandle);
-		data->client.ihandle = NULL;
+		memset((void *)&data->client,
+			0, sizeof(struct qseecom_client_handle));
 	}
 	return ret;
 }
@@ -3298,7 +3299,6 @@ int __boundary_checks_offset(struct qseecom_send_modfd_cmd_req *req,
 	return 0;
 }
 
-/* MODIFIED-BEGIN by hongwei.tian, 2020-10-09,BUG-10015863*/
 static int __boundary_checks_offset_64(struct qseecom_send_modfd_cmd_req *req,
 			struct qseecom_send_modfd_listener_resp *lstnr_resp,
 			struct qseecom_dev_handle *data, int i)
@@ -3325,7 +3325,6 @@ static int __boundary_checks_offset_64(struct qseecom_send_modfd_cmd_req *req,
 	}
 	return 0;
 }
-/* MODIFIED-END by hongwei.tian,BUG-10015863*/
 
 static int __qseecom_update_cmd_buf(void *msg, bool cleanup,
 			struct qseecom_dev_handle *data)
@@ -3684,7 +3683,8 @@ static int __qseecom_update_cmd_buf_64(void *msg, bool cleanup,
 		sg = sg_ptr->sgl;
 		if (sg_ptr->nents == 1) {
 			uint64_t *update_64bit;
-			if (__boundary_checks_offset_64(req, lstnr_resp, data, i)) // MODIFIED by hongwei.tian, 2020-10-09,BUG-10015863
+			if (__boundary_checks_offset_64(req, lstnr_resp,
+						data, i))
 				goto err;
 				/* 64bit app uses 64bit address */
 			update_64bit = (uint64_t *) field;
