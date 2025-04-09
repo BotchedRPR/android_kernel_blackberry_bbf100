@@ -424,17 +424,14 @@
 		};
 
 		cont_splash_mem: splash_region@9d400000 {
-			reg = <0x0 0x9d400000 0x0 0x02400000>;
+			reg = <0x0 0x9d400000 0x0 0x23ff000>;
 			label = "cont_splash_mem";
 		};
-                /* [FEATURE]-Add-BEGIN by TCLNB.huaidi.feng,2017/09/19, enable pstore function task-5345652*/
-                /*pstore_mem: region@0 {
-                        compatible = "removed-dma-pool";
-                        no-map;
-                        reg = <0x0 0xffe00000 0x0 0x00200000>;
-                        label = "pstore_mem";
-               };*/  /*BBRY uses rese_cause for kmsg collection, do not use TCL changes in this file.*/
-               /* [FEATURE]-Add-END by TCLNB.huaidi.feng */
+
+		dfps_data_mem: dfps_data_mem@0x9f7ff000 {
+		       reg = <0 0x9f7ff000 0 0x00001000>;
+		       label = "dfps_data_mem";
+		};
 	};
 
 	bluetooth: bt_wcn3990 {

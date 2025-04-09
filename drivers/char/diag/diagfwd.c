@@ -498,10 +498,8 @@ void diag_update_userspace_clients(unsigned int type)
 
 	mutex_lock(&driver->diagchar_mutex);
 	for (i = 0; i < driver->num_clients; i++)
-		/* MODIFIED-BEGIN by Wu Yan, 2018-06-01,BUG-6362777*/
 		if (driver->client_map[i].pid != 0 &&
-		    type != (driver->data_ready[i] & type)) {
-		    /* MODIFIED-END by Wu Yan,BUG-6362777*/
+			!(driver->data_ready[i] & type)) {
 			driver->data_ready[i] |= type;
 			atomic_inc(&driver->data_ready_notif[i]);
 		}
@@ -521,13 +519,11 @@ void diag_update_md_clients(unsigned int type)
 				if (driver->client_map[j].pid != 0 &&
 					driver->client_map[j].pid ==
 					driver->md_session_map[i]->pid) {
-					/* MODIFIED-BEGIN by Wu Yan, 2018-06-01,BUG-6362777*/
-					if (type != (driver->data_ready[j] & type)) {
+					if (!(driver->data_ready[j] & type)) {
 						driver->data_ready[j] |= type;
 						atomic_inc(
-							&driver->data_ready_notif[j]);
+						&driver->data_ready_notif[j]);
 					}
-					/* MODIFIED-END by Wu Yan,BUG-6362777*/
 					break;
 				}
 			}
@@ -543,12 +539,10 @@ void diag_update_sleeping_process(int process_id, int data_type)
 	mutex_lock(&driver->diagchar_mutex);
 	for (i = 0; i < driver->num_clients; i++)
 		if (driver->client_map[i].pid == process_id) {
-			/* MODIFIED-BEGIN by Wu Yan, 2018-06-01,BUG-6362777*/
-			if (data_type != (driver->data_ready[i] & data_type)) {
+			if (!(driver->data_ready[i] & data_type)) {
 				driver->data_ready[i] |= data_type;
 				atomic_inc(&driver->data_ready_notif[i]);
 			}
-			/* MODIFIED-END by Wu Yan,BUG-6362777*/
 			break;
 		}
 	wake_up_interruptible(&driver->wait_q);
