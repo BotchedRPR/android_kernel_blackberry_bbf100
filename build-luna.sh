@@ -2,7 +2,7 @@
 
 set -e
 
-rm -rf ../BUILD
+#rm -rf ../BUILD
 
 export USE_CCACHE=1
 export CCACHE_EXEC=/usr/bin/ccache
@@ -12,6 +12,7 @@ ccache -o compression=true
 export ARCH=arm64
 export CROSS_COMPILE=/media/igor/Android/bbry/aarch64-linux-android-4.9/bin/aarch64-linux-android-
 
+# Only on clean builds
 #make O=../BUILD CROSS_COMPILE=$CROSS_COMPILE ARCH=$ARCH mrproper
 
 make O=../BUILD CROSS_COMPILE=$CROSS_COMPILE ARCH=$ARCH luna-perf_defconfig
