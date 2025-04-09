@@ -977,7 +977,7 @@ static int diag_cmd_set_all_msg_mask(unsigned char *src_buf, int src_len,
 			driver->msg_mask_tbl_count;
 	mask_info->status = (req->rt_mask) ? DIAG_CTRL_MASK_ALL_ENABLED :
 					   DIAG_CTRL_MASK_ALL_DISABLED;
-	for (i = 0; i < driver->msg_mask_tbl_count; i++, mask++) {
+	for (i = 0; i < msg_mask_tbl_count; i++, mask++) {
 		if (mask && mask->ptr) {
 			mutex_lock(&mask->lock);
 			memset(mask->ptr, req->rt_mask,
