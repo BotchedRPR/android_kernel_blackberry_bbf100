@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -329,7 +329,7 @@ static int __write_queue(struct vidc_iface_q_info *qinfo, u8 *packet,
 {
 	struct hfi_queue_header *queue;
 	u32 packet_size_in_words, new_write_idx;
-	u32 empty_space, read_idx, write_idx; // MODIFIED by hongwei.tian, 2019-05-09,BUG-7710305
+	u32 empty_space, read_idx, write_idx;
 	u32 *write_ptr;
 
 	if (!qinfo || !packet) {
@@ -352,7 +352,6 @@ static int __write_queue(struct vidc_iface_q_info *qinfo, u8 *packet,
 	}
 
 	packet_size_in_words = (*(u32 *)packet) >> 2;
-	/* MODIFIED-BEGIN by hongwei.tian, 2019-05-09,BUG-7710305*/
 	if (!packet_size_in_words || packet_size_in_words >
 		qinfo->q_array.mem_size>>2) {
 		dprintk(VIDC_ERR, "Invalid packet size\n");
@@ -365,7 +364,6 @@ static int __write_queue(struct vidc_iface_q_info *qinfo, u8 *packet,
 	empty_space = (write_idx >=  read_idx) ?
 		((qinfo->q_array.mem_size>>2) - (write_idx -  read_idx)) :
 		(read_idx - write_idx);
-		/* MODIFIED-END by hongwei.tian,BUG-7710305*/
 	if (empty_space <= packet_size_in_words) {
 		queue->qhdr_tx_req =  1;
 		dprintk(VIDC_ERR, "Insufficient size (%d) to write (%d)\n",
@@ -375,7 +373,6 @@ static int __write_queue(struct vidc_iface_q_info *qinfo, u8 *packet,
 
 	queue->qhdr_tx_req =  0;
 
-	/* MODIFIED-BEGIN by hongwei.tian, 2019-05-09,BUG-7710305*/
 	new_write_idx = write_idx + packet_size_in_words;
 	write_ptr = (u32 *)((qinfo->q_array.align_virtual_addr) +
 			(write_idx << 2));
@@ -390,7 +387,6 @@ static int __write_queue(struct vidc_iface_q_info *qinfo, u8 *packet,
 		memcpy(write_ptr, packet, packet_size_in_words << 2);
 	} else {
 		new_write_idx -= qinfo->q_array.mem_size >> 2;
-		/* MODIFIED-END by hongwei.tian,BUG-7710305*/
 		memcpy(write_ptr, packet, (packet_size_in_words -
 			new_write_idx) << 2);
 		memcpy((void *)qinfo->q_array.align_virtual_addr,
@@ -482,10 +478,8 @@ static int __read_queue(struct vidc_iface_q_info *qinfo, u8 *packet,
 	u32 packet_size_in_words, new_read_idx;
 	u32 *read_ptr;
 	u32 receive_request = 0;
-	/* MODIFIED-BEGIN by hongwei.tian, 2019-05-09,BUG-7710305*/
 	u32 read_idx, write_idx;
 	int rc = 0;
-	/* MODIFIED-END by hongwei.tian,BUG-7710305*/
 
 	if (!qinfo || !packet || !pb_tx_req_is_set) {
 		dprintk(VIDC_ERR, "Invalid Params\n");
@@ -516,12 +510,10 @@ static int __read_queue(struct vidc_iface_q_info *qinfo, u8 *packet,
 	if (queue->qhdr_type & HFI_Q_ID_CTRL_TO_HOST_MSG_Q)
 		receive_request = 1;
 
-	/* MODIFIED-BEGIN by hongwei.tian, 2019-05-09,BUG-7710305*/
 	read_idx = queue->qhdr_read_idx;
 	write_idx = queue->qhdr_write_idx;
 
 	if (read_idx == write_idx) {
-	/* MODIFIED-END by hongwei.tian,BUG-7710305*/
 		queue->qhdr_rx_req = receive_request;
 		*pb_tx_req_is_set = 0;
 		dprintk(VIDC_DBG,
@@ -533,7 +525,6 @@ static int __read_queue(struct vidc_iface_q_info *qinfo, u8 *packet,
 	}
 
 	read_ptr = (u32 *)((qinfo->q_array.align_virtual_addr) +
-				/* MODIFIED-BEGIN by hongwei.tian, 2019-05-09,BUG-7710305*/
 				(read_idx << 2));
 	if (read_ptr < (u32 *)qinfo->q_array.align_virtual_addr ||
 	    read_ptr > (u32 *)(qinfo->q_array.align_virtual_addr +
@@ -556,7 +547,6 @@ static int __read_queue(struct vidc_iface_q_info *qinfo, u8 *packet,
 					packet_size_in_words << 2);
 		} else {
 			new_read_idx -= (qinfo->q_array.mem_size >> 2);
-			/* MODIFIED-END by hongwei.tian,BUG-7710305*/
 			memcpy(packet, read_ptr,
 			(packet_size_in_words - new_read_idx) << 2);
 			memcpy(packet + ((packet_size_in_words -
@@ -567,7 +557,6 @@ static int __read_queue(struct vidc_iface_q_info *qinfo, u8 *packet,
 	} else {
 		dprintk(VIDC_WARN,
 			"BAD packet received, read_idx: %#x, pkt_size: %d\n",
-			/* MODIFIED-BEGIN by hongwei.tian, 2019-05-09,BUG-7710305*/
 			read_idx, packet_size_in_words << 2);
 		dprintk(VIDC_WARN, "Dropping this packet\n");
 		new_read_idx = write_idx;
@@ -580,7 +569,6 @@ static int __read_queue(struct vidc_iface_q_info *qinfo, u8 *packet,
 		queue->qhdr_rx_req = receive_request;
 
 	queue->qhdr_read_idx = new_read_idx;
-	/* MODIFIED-END by hongwei.tian,BUG-7710305*/
 
 	*pb_tx_req_is_set = (1 == queue->qhdr_tx_req) ? 1 : 0;
 

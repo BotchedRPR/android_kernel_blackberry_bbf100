@@ -1775,7 +1775,7 @@ static int __diag_mask_init(struct diag_mask_info *mask_info, int mask_len,
 		mask_info->update_buf = kzalloc(update_buf_len, GFP_KERNEL);
 		if (!mask_info->update_buf) {
 			kfree(mask_info->ptr);
-			mask_info->ptr = NULL; // MODIFIED by hongwei.tian, 2019-12-06,BUG-8663284
+			mask_info->ptr = NULL;
 			return -ENOMEM;
 		}
 		kmemleak_not_leak(mask_info->update_buf);

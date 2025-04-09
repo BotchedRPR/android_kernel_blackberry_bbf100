@@ -513,7 +513,6 @@ static void *fast_smmu_alloc(struct device *dev, size_t size,
 	av8l_fast_iopte *ptep;
 	unsigned long flags;
 	struct sg_mapping_iter miter;
-	/* MODIFIED-BEGIN by hongwei.tian, 2019-08-01,BUG-8201396*/
 	size_t count = ALIGN(size, SZ_4K) >> PAGE_SHIFT;
 	int prot = IOMMU_READ | IOMMU_WRITE; /* TODO: extract from attrs */
 	bool is_coherent = is_dma_coherent(dev, attrs);
@@ -529,7 +528,6 @@ static void *fast_smmu_alloc(struct device *dev, size_t size,
 		dev_err(dev, "count: %zx exceeds UNIT_MAX\n", count);
 		return NULL;
 	}
-	/* MODIFIED-END by hongwei.tian,BUG-8201396*/
 
 	prot = __get_iommu_pgprot(attrs, prot, is_coherent);
 

@@ -66,11 +66,8 @@
 
 /* 16 encoder and 16 decoder sessions */
 #define VIDC_MAX_SESSIONS               32
-/* MODIFIED-BEGIN by hongwei.tian, 2019-05-09,BUG-7710306*/
 #define VIDC_MAX_DECODE_SESSIONS        16
 #define VIDC_MAX_ENCODE_SESSIONS        16
-/* MODIFIED-END by hongwei.tian,BUG-7710306*/
-
 
 enum vidc_status {
 	VIDC_ERR_NONE = 0x0,
