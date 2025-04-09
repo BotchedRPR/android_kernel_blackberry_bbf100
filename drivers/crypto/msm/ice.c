@@ -1729,8 +1729,7 @@ int qcom_ice_setup_ice_hw(const char *storage_type, int enable)
 	if (ice_dev == ERR_PTR(-EPROBE_DEFER))
 		return -EPROBE_DEFER;
 
-	if (!ice_dev || (ice_dev->is_ice_enabled == false)) // MODIFIED by hongwei.tian, 2019-06-03,BUG-7786876
-
+	if (!ice_dev || (ice_dev->is_ice_enabled == false))
 		return ret;
 
 	if (enable)

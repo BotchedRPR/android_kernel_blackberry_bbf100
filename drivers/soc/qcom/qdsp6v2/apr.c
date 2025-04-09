@@ -585,15 +585,10 @@ void apr_cb_func(void *buf, int len, void *priv)
 		return;
 	}
 
-
-	/* MODIFIED-BEGIN by hongwei.tian, 2019-06-03,BUG-7786879*/
-
 	if (hdr->pkt_size < hdr_size) {
 		pr_err("APR: Packet size less than header size\n");
 		return;
 	}
-
-	/* MODIFIED-END by hongwei.tian,BUG-7786879*/
 
 	msg_type = hdr->hdr_field;
 	msg_type = (msg_type >> 0x08) & 0x0003;
