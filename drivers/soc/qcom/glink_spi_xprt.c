@@ -121,6 +121,8 @@ struct glink_cmpnt {
  * @tx_fifo_write_reg_addr:	Address of the TX FIFO Write Index Register.
  * @rx_fifo_read_reg_addr:	Address of the RX FIFO Read Index Register.
  * @rx_fifo_write_reg_addr:	Address of the RX FIFO Write Index Register.
+ * @tx_fifo_write:		Internal write index for TX FIFO.
+ * @rx_fifo_read:		Internal read index for RX FIFO.
  * @kwork:			Work to be executed when receiving data.
  * @kworker:			Handle to the entity processing @kwork.
  * @task:			Handle to the task context that runs @kworker.
@@ -158,6 +160,8 @@ struct edge_info {
 	unsigned int tx_fifo_write_reg_addr;
 	unsigned int rx_fifo_read_reg_addr;
 	unsigned int rx_fifo_write_reg_addr;
+	uint32_t tx_fifo_write;
+	uint32_t rx_fifo_read;
 
 	struct kthread_work kwork;
 	struct kthread_worker kworker;
@@ -368,6 +372,19 @@ static int glink_spi_xprt_write_avail(struct edge_info *einfo)
 	int write_avail;
 	int ret;
 
+	if (unlikely(!einfo->tx_fifo_start)) {
+		ret = glink_spi_xprt_reg_read(einfo,
+			einfo->tx_fifo_write_reg_addr, &einfo->tx_fifo_write);
+		if (ret < 0) {
+			pr_err("%s: Error %d reading %s tx_fifo_write_reg_addr %d\n",
+				__func__, ret, einfo->xprt_cfg.edge,
+				einfo->tx_fifo_write_reg_addr);
+			return 0;
+		}
+		einfo->tx_fifo_start = einfo->tx_fifo_write;
+	}
+	write_id = einfo->tx_fifo_write;
+
 	ret = glink_spi_xprt_reg_read(einfo, einfo->tx_fifo_read_reg_addr,
 				   &read_id);
 	if (ret < 0) {
@@ -377,20 +394,8 @@ static int glink_spi_xprt_write_avail(struct edge_info *einfo)
 		return 0;
 	}
 
-	ret = glink_spi_xprt_reg_read(einfo, einfo->tx_fifo_write_reg_addr,
-				&write_id);
-	if (ret < 0) {
-		pr_err("%s: Error %d reading %s tx_fifo_write_reg_addr %d\n",
-			__func__, ret, einfo->xprt_cfg.edge,
-			einfo->tx_fifo_write_reg_addr);
-		return 0;
-	}
-
 	if (!read_id || !write_id)
 		return 0;
-
-	if (unlikely(!einfo->tx_fifo_start))
-		einfo->tx_fifo_start = write_id;
 
 	if (read_id > write_id)
 		write_avail = read_id - write_id;
@@ -421,14 +426,18 @@ static int glink_spi_xprt_read_avail(struct edge_info *einfo)
 	int read_avail;
 	int ret;
 
-	ret = glink_spi_xprt_reg_read(einfo, einfo->rx_fifo_read_reg_addr,
-				   &read_id);
-	if (ret < 0) {
-		pr_err("%s: Error %d reading %s rx_fifo_read_reg_addr %d\n",
-			__func__, ret, einfo->xprt_cfg.edge,
-			einfo->rx_fifo_read_reg_addr);
-		return 0;
+	if (unlikely(!einfo->rx_fifo_start)) {
+		ret = glink_spi_xprt_reg_read(einfo,
+			einfo->rx_fifo_read_reg_addr, &einfo->rx_fifo_read);
+		if (ret < 0) {
+			pr_err("%s: Error %d reading %s rx_fifo_read_reg_addr %d\n",
+				__func__, ret, einfo->xprt_cfg.edge,
+				einfo->rx_fifo_read_reg_addr);
+			return 0;
+		}
+		einfo->rx_fifo_start = einfo->rx_fifo_read;
 	}
+	read_id = einfo->rx_fifo_read;
 
 	ret = glink_spi_xprt_reg_read(einfo, einfo->rx_fifo_write_reg_addr,
 				&write_id);
@@ -441,9 +450,6 @@ static int glink_spi_xprt_read_avail(struct edge_info *einfo)
 
 	if (!read_id || !write_id)
 		return 0;
-
-	if (unlikely(!einfo->rx_fifo_start))
-		einfo->rx_fifo_start = read_id;
 
 	if (read_id <= write_id)
 		read_avail = write_id - read_id;
@@ -471,15 +477,7 @@ static int glink_spi_xprt_rx_cmd(struct edge_info *einfo, void *dst,
 	uint32_t offset = 0;
 	int ret;
 
-	ret = glink_spi_xprt_reg_read(einfo, einfo->rx_fifo_read_reg_addr,
-				   &read_id);
-	if (ret < 0) {
-		pr_err("%s: Error %d reading %s rx_fifo_read_reg_addr %d\n",
-			__func__, ret, einfo->xprt_cfg.edge,
-			einfo->rx_fifo_read_reg_addr);
-		return ret;
-	}
-	/* MODIFIED-BEGIN by hongwei.tian, 2019-06-10,BUG-7848295*/
+	read_id = einfo->rx_fifo_read;
 	if ((read_id > (einfo->rx_fifo_start + einfo->fifo_size)) ||
 		(read_id < einfo->rx_fifo_start)) {
 		pr_err("%s: Invalid rx_fifo_read: %d, start: %d, size: %d\n",
@@ -487,7 +485,6 @@ static int glink_spi_xprt_rx_cmd(struct edge_info *einfo, void *dst,
 			einfo->fifo_size);
 		return -EINVAL;
 	}
-	/* MODIFIED-END by hongwei.tian,BUG-7848295*/
 	do {
 		if ((read_id + size_to_read) >=
 		    (einfo->rx_fifo_start + einfo->fifo_size))
@@ -512,6 +509,9 @@ static int glink_spi_xprt_rx_cmd(struct edge_info *einfo, void *dst,
 		pr_err("%s: Error %d writing %s rx_fifo_read_reg_addr %d\n",
 			__func__, ret, einfo->xprt_cfg.edge,
 			einfo->rx_fifo_read_reg_addr);
+	else
+		einfo->rx_fifo_read = read_id;
+
 	return ret;
 }
 
@@ -534,15 +534,7 @@ static int glink_spi_xprt_tx_cmd_safe(struct edge_info *einfo, void *src,
 	uint32_t offset = 0;
 	int ret;
 
-	ret = glink_spi_xprt_reg_read(einfo, einfo->tx_fifo_write_reg_addr,
-				&write_id);
-	if (ret < 0) {
-		pr_err("%s: Error %d reading %s tx_fifo_write_reg_addr %d\n",
-			__func__, ret, einfo->xprt_cfg.edge,
-			einfo->tx_fifo_write_reg_addr);
-		return ret;
-	}
-
+	write_id = einfo->tx_fifo_write;
 	do {
 		if ((write_id + size_to_write) >=
 		    (einfo->tx_fifo_start + einfo->fifo_size))
@@ -567,6 +559,9 @@ static int glink_spi_xprt_tx_cmd_safe(struct edge_info *einfo, void *src,
 		pr_err("%s: Error %d writing %s tx_fifo_write_reg_addr %d\n",
 			__func__, ret, einfo->xprt_cfg.edge,
 			einfo->tx_fifo_write_reg_addr);
+	else
+		einfo->tx_fifo_write = write_id;
+
 	return ret;
 }
 
@@ -728,13 +723,11 @@ static void process_rx_cmd(struct edge_info *einfo,
 	struct rx_short_data_desc {
 		unsigned char data[SHORT_PKT_SIZE];
 	};
-	/* MODIFIED-BEGIN by hongwei.tian, 2019-06-10,BUG-7848295*/
 	struct command *cmd = NULL;
 	struct intent_desc *intents;
 	struct rx_desc *rx_descp;
 	struct rx_short_data_desc *rx_sd_descp;
 	uint64_t offset = 0;
-	/* MODIFIED-END by hongwei.tian,BUG-7848295*/
 	int rcu_id;
 	uint16_t rcid;
 	uint16_t name_len;
@@ -750,10 +743,8 @@ static void process_rx_cmd(struct edge_info *einfo,
 	}
 
 	while (offset < rx_size) {
-		/* MODIFIED-BEGIN by hongwei.tian, 2019-06-10,BUG-7848295*/
 		if (offset + sizeof(*cmd) > rx_size)
 			goto err;
-			/* MODIFIED-END by hongwei.tian,BUG-7848295*/
 		cmd = (struct command *)(rx_data + offset);
 		offset += sizeof(*cmd);
 		switch (cmd->id) {
@@ -772,14 +763,12 @@ static void process_rx_cmd(struct edge_info *einfo,
 		case OPEN_CMD:
 			rcid = cmd->param1;
 			name_len = (uint16_t)(cmd->param2 & 0xFFFF);
-			/* MODIFIED-BEGIN by hongwei.tian, 2019-06-10,BUG-7848295*/
 			if (name_len > GLINK_NAME_SIZE)
 				goto err;
 			prio = (uint16_t)((cmd->param2 & 0xFFFF0000) >> 16);
 			if (offset + ALIGN(name_len, FIFO_ALIGNMENT) >
 				rx_size)
 				goto err;
-				/* MODIFIED-END by hongwei.tian,BUG-7848295*/
 			name = (char *)(rx_data + offset);
 			offset += ALIGN(name_len, FIFO_ALIGNMENT);
 			einfo->xprt_if.glink_core_if_ptr->rx_cmd_ch_remote_open(
@@ -805,10 +794,8 @@ static void process_rx_cmd(struct edge_info *einfo,
 
 		case RX_INTENT_CMD:
 			for (i = 0; i < cmd->param2; i++) {
-				/* MODIFIED-BEGIN by hongwei.tian, 2019-06-10,BUG-7848295*/
 				if (offset + sizeof(*intents) > rx_size)
 					goto err;
-					/* MODIFIED-END by hongwei.tian,BUG-7848295*/
 				intents = (struct intent_desc *)
 						(rx_data + offset);
 				offset += sizeof(*intents);
@@ -844,10 +831,8 @@ static void process_rx_cmd(struct edge_info *einfo,
 		case TX_DATA_CONT_CMD:
 		case TRACER_PKT_CMD:
 		case TRACER_PKT_CONT_CMD:
-			/* MODIFIED-BEGIN by hongwei.tian, 2019-06-10,BUG-7848295*/
 			if (offset + sizeof(*rx_descp) > rx_size)
 				goto err;
-				/* MODIFIED-END by hongwei.tian,BUG-7848295*/
 			rx_descp = (struct rx_desc *)(rx_data + offset);
 			offset += sizeof(*rx_descp);
 			process_rx_data(einfo, cmd->id, cmd->param1,
@@ -857,10 +842,8 @@ static void process_rx_cmd(struct edge_info *einfo,
 			break;
 
 		case TX_SHORT_DATA_CMD:
-			/* MODIFIED-BEGIN by hongwei.tian, 2019-06-10,BUG-7848295*/
 			if (offset + sizeof(*rx_sd_descp) > rx_size)
 				goto err;
-				/* MODIFIED-END by hongwei.tian,BUG-7848295*/
 			rx_sd_descp = (struct rx_short_data_desc *)
 							(rx_data + offset);
 			offset += sizeof(*rx_sd_descp);
@@ -889,7 +872,6 @@ static void process_rx_cmd(struct edge_info *einfo,
 		}
 	}
 	srcu_read_unlock(&einfo->use_ref, rcu_id);
-	/* MODIFIED-BEGIN by hongwei.tian, 2019-06-10,BUG-7848295*/
 	return;
 err:
 	srcu_read_unlock(&einfo->use_ref, rcu_id);
@@ -897,7 +879,6 @@ err:
 		pr_err("%s: invalid size of rx_data: %d, cmd : %d\n",
 			__func__, rx_size, cmd->id);
 	return;
-	/* MODIFIED-END by hongwei.tian,BUG-7848295*/
 }
 
 /**
@@ -1278,6 +1259,8 @@ static int ssr(struct glink_transport_if *if_ptr)
 	einfo->tx_blocked_signal_sent = false;
 	einfo->tx_fifo_start = 0;
 	einfo->rx_fifo_start = 0;
+	einfo->tx_fifo_write = 0;
+	einfo->rx_fifo_read = 0;
 	einfo->fifo_size = DEFAULT_FIFO_SIZE;
 	einfo->xprt_if.glink_core_if_ptr->link_down(&einfo->xprt_if);
 
