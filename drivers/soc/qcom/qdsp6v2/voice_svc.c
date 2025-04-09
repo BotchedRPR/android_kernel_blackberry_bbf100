@@ -68,11 +68,9 @@ static void *dummy_q6_mvm;
 static void *dummy_q6_cvs;
 dev_t device_num;
 
-/* MODIFIED-BEGIN by hongwei.tian, 2019-06-03,BUG-7786812*/
-struct mutex session_lock;
+static struct mutex session_lock;
 static spinlock_t voicesvc_lock;
 static bool is_released = 1;
-/* MODIFIED-END by hongwei.tian,BUG-7786812*/
 static int voice_svc_dummy_reg(void);
 static int voice_svc_dummy_dereg(void);
 
@@ -648,7 +646,6 @@ static int voice_svc_dummy_dereg(void)
 static int voice_svc_open(struct inode *inode, struct file *file)
 {
 	struct voice_svc_prvt *prtd = NULL;
-	/* MODIFIED-BEGIN by hongwei.tian, 2019-06-03,BUG-7786812*/
 	int ret = 0;
 
 	pr_debug("%s\n", __func__);
@@ -666,7 +663,6 @@ static int voice_svc_open(struct inode *inode, struct file *file)
 		pr_err("%s: kmalloc failed\n", __func__);
 		ret = -ENOMEM;
 		goto done;
-		/* MODIFIED-END by hongwei.tian,BUG-7786812*/
 	}
 
 	memset(prtd, 0, sizeof(struct voice_svc_prvt));
@@ -690,11 +686,9 @@ static int voice_svc_open(struct inode *inode, struct file *file)
 		voice_svc_dummy_reg();
 		reg_dummy_sess = 1;
 	}
-/* MODIFIED-BEGIN by hongwei.tian, 2019-06-03,BUG-7786812*/
 done:
 	mutex_unlock(&session_lock);
 	return ret;
-	/* MODIFIED-END by hongwei.tian,BUG-7786812*/
 }
 
 static int voice_svc_release(struct inode *inode, struct file *file)
@@ -828,7 +822,7 @@ static int voice_svc_probe(struct platform_device *pdev)
 	}
 	pr_debug("%s: Device created\n", __func__);
 	spin_lock_init(&voicesvc_lock);
-	mutex_init(&session_lock); // MODIFIED by hongwei.tian, 2019-06-03,BUG-7786812
+	mutex_init(&session_lock);
 	goto done;
 
 add_err:
@@ -851,7 +845,7 @@ static int voice_svc_remove(struct platform_device *pdev)
 	kfree(voice_svc_dev->cdev);
 	device_destroy(voice_svc_class, device_num);
 	class_destroy(voice_svc_class);
-	mutex_destroy(&session_lock); // MODIFIED by hongwei.tian, 2019-06-03,BUG-7786812
+	mutex_destroy(&session_lock);
 	unregister_chrdev_region(0, MINOR_NUMBER);
 
 	return 0;
