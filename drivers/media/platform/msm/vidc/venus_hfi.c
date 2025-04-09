@@ -3643,7 +3643,7 @@ static int __response_handler(struct venus_hfi_device *device)
 			*session_id = session->session_id;
 		}
 
-		if (packet_count >= max_packets) { // MODIFIED by hongwei.tian, 2020-04-10,BUG-9194852
+		if (packet_count >= max_packets) {
 			dprintk(VIDC_WARN,
 					"Too many packets in message queue to handle at once, deferring read\n");
 			break;
