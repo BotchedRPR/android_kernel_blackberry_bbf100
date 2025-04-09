@@ -21,6 +21,7 @@
 #include "sdcardfs.h"
 #include <linux/fs_struct.h>
 #include <linux/ratelimit.h>
+#include <linux/sched.h>
 
 const struct cred *override_fsids(struct sdcardfs_sb_info *sbi,
 		struct sdcardfs_inode_data *data)
@@ -100,7 +101,7 @@ static int sdcardfs_create(struct inode *dir, struct dentry *dentry,
 		err = -ENOMEM;
 		goto out_unlock;
 	}
-	current->fs->umask = 0;
+	copied_fs->umask = 0;
 	task_lock(current);
 	current->fs = copied_fs;
 	task_unlock(current);
@@ -266,7 +267,7 @@ static int sdcardfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode
 		unlock_dir(lower_parent_dentry);
 		goto out_unlock;
 	}
-	current->fs->umask = 0;
+	copied_fs->umask = 0;
 	task_lock(current);
 	current->fs = copied_fs;
 	task_unlock(current);
@@ -599,27 +600,7 @@ static int sdcardfs_permission(struct vfsmount *mnt, struct inode *inode, int ma
 	if (IS_POSIXACL(inode))
 		pr_warn("%s: This may be undefined behavior...\n", __func__);
 	err = generic_permission(&tmp, mask);
-
-#ifdef CONFIG_BBSECURE_SDAFW
-	{
-		struct dentry *d =  hlist_entry(inode->i_dentry.first, struct dentry, d_u.d_alias);
-		if( 0 == policy_check_caller_access_to_name(inode, &d->d_name, FMODE_READ) ) {
-			err = -EACCES;
-		}
-	}
-#endif // CONFIG_BBSECURE_SDAFW
-
-#if defined(CONFIG_BBSECURE_ADBAFW) && !defined(CONFIG_BBSECURE_SDAFW)
-	{
-		struct dentry *d =  hlist_entry(inode->i_dentry.first, struct dentry, d_u.d_alias);
-		if( 0 == policy_check_caller_access_to_name(inode, &d->d_name, FMODE_READ) ) {
-			err = -EACCES;
-		}
-	}
-#endif // defined(CONFIG_BBSECURE_ADBAFW) && !defined(CONFIG_BBSECURE_SDAFW)
-
 	return err;
-
 }
 
 static int sdcardfs_setattr_wrn(struct dentry *dentry, struct iattr *ia)
